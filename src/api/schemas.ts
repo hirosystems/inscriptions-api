@@ -331,7 +331,17 @@ export const InscriptionResponse = Type.Object(
         examples: ['1463d48e9248159084929294f64bda04487503d30ce7ab58365df1dc6fd58218i0'],
       })
     ),
+    delegate: Nullable(
+      Type.String({
+        examples: ['1463d48e9248159084929294f64bda04487503d30ce7ab58365df1dc6fd58218i0'],
+      })
+    ),
     metadata: Nullable(Type.Any()),
+    meta_protocol: Nullable(
+      Type.String({
+        examples: ['brc20'],
+      })
+    ),
   },
   { title: 'Inscription Response' }
 );

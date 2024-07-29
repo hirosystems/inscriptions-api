@@ -126,6 +126,8 @@ describe('/inscriptions', () => {
         recursion_refs: null,
         parent: null,
         metadata: null,
+        meta_protocol: null,
+        delegate: null,
       };
 
       // By inscription id
@@ -284,6 +286,8 @@ describe('/inscriptions', () => {
         ],
         parent: null,
         metadata: null,
+        meta_protocol: null,
+        delegate: null,
       };
 
       // By inscription id
@@ -489,6 +493,8 @@ describe('/inscriptions', () => {
         recursion_refs: null,
         parent: null,
         metadata: null,
+        meta_protocol: null,
+        delegate: null,
       };
 
       // By inscription id
@@ -573,6 +579,8 @@ describe('/inscriptions', () => {
         recursion_refs: null,
         parent: null,
         metadata: null,
+        meta_protocol: null,
+        delegate: null,
       };
 
       // By inscription id
@@ -686,6 +694,8 @@ describe('/inscriptions', () => {
         recursion_refs: null,
         parent: null,
         metadata: null,
+        meta_protocol: null,
+        delegate: null,
       });
 
       // Transfer 2
@@ -743,6 +753,8 @@ describe('/inscriptions', () => {
         recursion_refs: null,
         parent: null,
         metadata: null,
+        meta_protocol: null,
+        delegate: null,
       });
     });
 
@@ -855,6 +867,8 @@ describe('/inscriptions', () => {
         recursion_refs: null,
         parent: null,
         metadata: null,
+        meta_protocol: null,
+        delegate: null,
       });
     });
 
@@ -952,6 +966,8 @@ describe('/inscriptions', () => {
         recursion_refs: null,
         parent: null,
         metadata: null,
+        meta_protocol: null,
+        delegate: null,
       });
 
       // Transfer 2
@@ -1009,6 +1025,8 @@ describe('/inscriptions', () => {
         recursion_refs: null,
         parent: null,
         metadata: null,
+        meta_protocol: null,
+        delegate: null,
       });
     });
   });
@@ -1656,6 +1674,8 @@ describe('/inscriptions', () => {
           recursion_refs: null,
           parent: null,
           metadata: null,
+          meta_protocol: null,
+          delegate: null,
         },
         {
           address: 'bc1pscktlmn99gyzlvymvrezh6vwd0l4kg06tg5rvssw0czg8873gz5sdkteqj',
@@ -1684,6 +1704,8 @@ describe('/inscriptions', () => {
           recursion_refs: null,
           parent: null,
           metadata: null,
+          meta_protocol: null,
+          delegate: null,
         },
       ]);
     });
@@ -1799,6 +1821,8 @@ describe('/inscriptions', () => {
           recursion_refs: null,
           parent: null,
           metadata: null,
+          meta_protocol: null,
+          delegate: null,
         };
         expect(responseJson1.results[0]).toStrictEqual(result1);
 
@@ -1836,6 +1860,8 @@ describe('/inscriptions', () => {
           recursion_refs: null,
           parent: null,
           metadata: null,
+          meta_protocol: null,
+          delegate: null,
         };
         expect(responseJson2.results[0]).toStrictEqual(result2);
 

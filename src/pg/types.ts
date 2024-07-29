@@ -25,6 +25,10 @@ export type DbInscriptionInsert = {
   recursive: boolean;
   metadata: string | null;
   parent: string | null;
+  input_index: number;
+  pointer: number | null;
+  metaprotocol: string | null;
+  delegate: string | null;
   timestamp: number;
 };
 
@@ -102,6 +106,10 @@ export type DbFullyLocatedInscriptionResult = {
   recursion_refs: string | null;
   parent: string | null;
   metadata: string | null;
+  input_index: number;
+  pointer: number | null;
+  metaprotocol: string | null;
+  delegate: string | null;
 };
 
 export enum DbLocationTransferType {
