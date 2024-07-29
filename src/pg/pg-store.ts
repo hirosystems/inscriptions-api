@@ -447,13 +447,22 @@ export class PgStore extends BasePgStore {
     args: InscriptionIdentifier
   ): Promise<DbInscriptionContent | undefined> {
     const result = await this.sql<DbInscriptionContent[]>`
+      WITH content_id AS (
+        SELECT
+          CASE
+            WHEN delegate IS NOT NULL THEN delegate
+            ELSE genesis_id
+          END AS genesis_id
+        FROM inscriptions
+        WHERE ${
+          'genesis_id' in args
+            ? this.sql`genesis_id = ${args.genesis_id}`
+            : this.sql`number = ${args.number}`
+        }
+      )
       SELECT content, content_type, content_length
       FROM inscriptions
-      WHERE ${
-        'genesis_id' in args
-          ? this.sql`genesis_id = ${args.genesis_id}`
-          : this.sql`number = ${args.number}`
-      }
+      WHERE genesis_id = (SELECT genesis_id FROM content_id)
     `;
     if (result.count > 0) {
       return result[0];
