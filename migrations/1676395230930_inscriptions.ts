@@ -59,10 +59,23 @@ export function up(pgm: MigrationBuilder): void {
       type: 'boolean',
       default: false,
     },
+    input_index: {
+      type: 'bigint',
+      notNull: true,
+    },
+    pointer: {
+      type: 'bigint',
+    },
     metadata: {
       type: 'text',
     },
+    metaprotocol: {
+      type: 'text',
+    },
     parent: {
+      type: 'text',
+    },
+    delegate: {
       type: 'text',
     },
     timestamp: {

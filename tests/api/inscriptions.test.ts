@@ -126,6 +126,8 @@ describe('/inscriptions', () => {
         recursion_refs: null,
         parent: null,
         metadata: null,
+        meta_protocol: null,
+        delegate: null,
       };
 
       // By inscription id
@@ -284,6 +286,8 @@ describe('/inscriptions', () => {
         ],
         parent: null,
         metadata: null,
+        meta_protocol: null,
+        delegate: null,
       };
 
       // By inscription id
@@ -489,6 +493,8 @@ describe('/inscriptions', () => {
         recursion_refs: null,
         parent: null,
         metadata: null,
+        meta_protocol: null,
+        delegate: null,
       };
 
       // By inscription id
@@ -573,6 +579,8 @@ describe('/inscriptions', () => {
         recursion_refs: null,
         parent: null,
         metadata: null,
+        meta_protocol: null,
+        delegate: null,
       };
 
       // By inscription id
@@ -686,6 +694,8 @@ describe('/inscriptions', () => {
         recursion_refs: null,
         parent: null,
         metadata: null,
+        meta_protocol: null,
+        delegate: null,
       });
 
       // Transfer 2
@@ -743,6 +753,8 @@ describe('/inscriptions', () => {
         recursion_refs: null,
         parent: null,
         metadata: null,
+        meta_protocol: null,
+        delegate: null,
       });
     });
 
@@ -855,6 +867,8 @@ describe('/inscriptions', () => {
         recursion_refs: null,
         parent: null,
         metadata: null,
+        meta_protocol: null,
+        delegate: null,
       });
     });
 
@@ -952,6 +966,8 @@ describe('/inscriptions', () => {
         recursion_refs: null,
         parent: null,
         metadata: null,
+        meta_protocol: null,
+        delegate: null,
       });
 
       // Transfer 2
@@ -1009,7 +1025,140 @@ describe('/inscriptions', () => {
         recursion_refs: null,
         parent: null,
         metadata: null,
+        meta_protocol: null,
+        delegate: null,
       });
+    });
+
+    test('shows inscription content', async () => {
+      await db.updateInscriptions(
+        new TestChainhookPayloadBuilder()
+          .apply()
+          .block({
+            height: 775617,
+            hash: '0x00000000000000000002a90330a99f67e3f01eb2ce070b45930581e82fb7a91d',
+            timestamp: 1676913207,
+          })
+          .transaction({
+            hash: '0x38c46a8bf7ec90bc7f6b797e7dc84baa97f4e5fd4286b92fe1b50176d03b18dc',
+          })
+          .inscriptionRevealed({
+            content_bytes: '0x48656C6C6F', // Hello
+            content_type: 'text/plain',
+            content_length: 5,
+            inscription_number: { classic: 0, jubilee: 0 },
+            inscription_fee: 2805,
+            inscription_id: '38c46a8bf7ec90bc7f6b797e7dc84baa97f4e5fd4286b92fe1b50176d03b18dci0',
+            inscription_output_value: 10000,
+            inscriber_address: 'bc1p3cyx5e2hgh53w7kpxcvm8s4kkega9gv5wfw7c4qxsvxl0u8x834qf0u2td',
+            ordinal_number: 257418248345364,
+            ordinal_block_height: 51483,
+            ordinal_offset: 0,
+            satpoint_post_inscription:
+              '38c46a8bf7ec90bc7f6b797e7dc84baa97f4e5fd4286b92fe1b50176d03b18dc:0:0',
+            curse_type: { tag: 66 },
+            inscription_input_index: 0,
+            transfers_pre_inscription: 0,
+            tx_index: 0,
+            inscription_pointer: null,
+            delegate: null,
+            metaprotocol: null,
+            metadata: null,
+            parent: null,
+          })
+          .build()
+      );
+      const response = await fastify.inject({
+        method: 'GET',
+        url: '/ordinals/v1/inscriptions/38c46a8bf7ec90bc7f6b797e7dc84baa97f4e5fd4286b92fe1b50176d03b18dci0/content',
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.headers['content-length']).toBe('5');
+      expect(response.body).toBe('Hello');
+    });
+
+    test('shows delegate inscription content', async () => {
+      await db.updateInscriptions(
+        new TestChainhookPayloadBuilder()
+          .apply()
+          .block({
+            height: 775617,
+            hash: '0x00000000000000000002a90330a99f67e3f01eb2ce070b45930581e82fb7a91d',
+            timestamp: 1676913207,
+          })
+          .transaction({
+            hash: '0x38c46a8bf7ec90bc7f6b797e7dc84baa97f4e5fd4286b92fe1b50176d03b18dc',
+          })
+          .inscriptionRevealed({
+            content_bytes: '0x48656C6C6F', // Hello
+            content_type: 'text/plain',
+            content_length: 5,
+            inscription_number: { classic: 0, jubilee: 0 },
+            inscription_fee: 2805,
+            inscription_id: '38c46a8bf7ec90bc7f6b797e7dc84baa97f4e5fd4286b92fe1b50176d03b18dci0',
+            inscription_output_value: 10000,
+            inscriber_address: 'bc1p3cyx5e2hgh53w7kpxcvm8s4kkega9gv5wfw7c4qxsvxl0u8x834qf0u2td',
+            ordinal_number: 257418248345364,
+            ordinal_block_height: 51483,
+            ordinal_offset: 0,
+            satpoint_post_inscription:
+              '38c46a8bf7ec90bc7f6b797e7dc84baa97f4e5fd4286b92fe1b50176d03b18dc:0:0',
+            curse_type: { tag: 66 },
+            inscription_input_index: 0,
+            transfers_pre_inscription: 0,
+            tx_index: 0,
+            inscription_pointer: null,
+            delegate: null,
+            metaprotocol: null,
+            metadata: null,
+            parent: null,
+          })
+          .build()
+      );
+      await db.updateInscriptions(
+        new TestChainhookPayloadBuilder()
+          .apply()
+          .block({
+            height: 775618,
+            hash: '0x00000000000000000000ceb7a81bf3696de0b2260078942f3ab36a7127aff296',
+            timestamp: 1676913207,
+          })
+          .transaction({
+            hash: '0x42174ecc8a245841035793390bb53d63b3c2acb61366446f601b09e73b94b656',
+          })
+          .inscriptionRevealed({
+            content_bytes: '',
+            content_type: 'text/plain',
+            content_length: 0,
+            inscription_number: { classic: 1, jubilee: 1 },
+            inscription_fee: 2805,
+            inscription_id: '42174ecc8a245841035793390bb53d63b3c2acb61366446f601b09e73b94b656i0',
+            inscription_output_value: 10000,
+            inscriber_address: 'bc1p3cyx5e2hgh53w7kpxcvm8s4kkega9gv5wfw7c4qxsvxl0u8x834qf0u2td',
+            ordinal_number: 257418248345364,
+            ordinal_block_height: 51483,
+            ordinal_offset: 0,
+            satpoint_post_inscription:
+              '42174ecc8a245841035793390bb53d63b3c2acb61366446f601b09e73b94b656:0:0',
+            curse_type: { tag: 66 },
+            inscription_input_index: 0,
+            transfers_pre_inscription: 0,
+            tx_index: 0,
+            inscription_pointer: null,
+            delegate: '38c46a8bf7ec90bc7f6b797e7dc84baa97f4e5fd4286b92fe1b50176d03b18dci0',
+            metaprotocol: null,
+            metadata: null,
+            parent: null,
+          })
+          .build()
+      );
+      const response = await fastify.inject({
+        method: 'GET',
+        url: '/ordinals/v1/inscriptions/42174ecc8a245841035793390bb53d63b3c2acb61366446f601b09e73b94b656i0/content',
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.headers['content-length']).toBe('5');
+      expect(response.body).toBe('Hello');
     });
   });
 
@@ -1656,6 +1805,8 @@ describe('/inscriptions', () => {
           recursion_refs: null,
           parent: null,
           metadata: null,
+          meta_protocol: null,
+          delegate: null,
         },
         {
           address: 'bc1pscktlmn99gyzlvymvrezh6vwd0l4kg06tg5rvssw0czg8873gz5sdkteqj',
@@ -1684,6 +1835,8 @@ describe('/inscriptions', () => {
           recursion_refs: null,
           parent: null,
           metadata: null,
+          meta_protocol: null,
+          delegate: null,
         },
       ]);
     });
@@ -1799,6 +1952,8 @@ describe('/inscriptions', () => {
           recursion_refs: null,
           parent: null,
           metadata: null,
+          meta_protocol: null,
+          delegate: null,
         };
         expect(responseJson1.results[0]).toStrictEqual(result1);
 
@@ -1836,6 +1991,8 @@ describe('/inscriptions', () => {
           recursion_refs: null,
           parent: null,
           metadata: null,
+          meta_protocol: null,
+          delegate: null,
         };
         expect(responseJson2.results[0]).toStrictEqual(result2);
 

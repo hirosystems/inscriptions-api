@@ -71,6 +71,10 @@ export class BlockCache {
       recursive: recursive_refs.length > 0,
       metadata: reveal.metadata ? JSON.stringify(reveal.metadata) : null,
       parent: reveal.parent,
+      delegate: reveal.delegate,
+      input_index: reveal.inscription_input_index,
+      pointer: reveal.inscription_pointer,
+      metaprotocol: reveal.metaprotocol,
       timestamp: this.timestamp,
     });
     this.revealedNumbers.push(reveal.inscription_number.jubilee);
