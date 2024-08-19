@@ -1,4 +1,9 @@
-import { isProdEnv, logger, registerShutdownConfig } from '@hirosystems/api-toolkit';
+import {
+  buildProfilerServer,
+  isProdEnv,
+  logger,
+  registerShutdownConfig,
+} from '@hirosystems/api-toolkit';
 import { buildApiServer, buildPromServer } from './api/init';
 import { startOrdhookServer } from './ordhook/server';
 import { ENV } from './env';
@@ -55,6 +60,16 @@ async function initApp() {
   if (['default', 'readonly'].includes(ENV.RUN_MODE)) {
     await initApiService(db);
   }
+
+  const profilerServer = await buildProfilerServer();
+  registerShutdownConfig({
+    name: 'Profiler Server',
+    forceKillable: false,
+    handler: async () => {
+      await profilerServer.close();
+    },
+  });
+  await profilerServer.listen({ host: ENV.API_HOST, port: ENV.PROFILER_PORT });
 
   registerShutdownConfig({
     name: 'DB',
