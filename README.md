@@ -34,7 +34,7 @@
 
 # API Reference
 
-See the [Ordinals API Reference](https://docs.hiro.so/ordinals/) for more
+See the [Ordinals API Reference](https://docs.hiro.so/bitcoin/ordinals/api) for more
 information.
 
 # Quick Start
