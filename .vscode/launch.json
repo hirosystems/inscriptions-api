@@ -14,6 +14,7 @@
       ],
       "outputCapture": "std",
       "internalConsoleOptions": "openOnSessionStart",
+      "envFile": "${workspaceFolder}/.env",
       "env": {
         "NODE_ENV": "development",
         "TS_NODE_SKIP_IGNORE": "true"
@@ -33,6 +34,7 @@
       ],
       "outputCapture": "std",
       "internalConsoleOptions": "openOnSessionStart",
+      "envFile": "${workspaceFolder}/.env",
       "env": {
         "NODE_ENV": "development",
         "TS_NODE_SKIP_IGNORE": "true",
@@ -53,10 +55,30 @@
       ],
       "outputCapture": "std",
       "internalConsoleOptions": "openOnSessionStart",
+      "envFile": "${workspaceFolder}/.env",
       "env": {
         "NODE_ENV": "development",
         "TS_NODE_SKIP_IGNORE": "true",
         "RUN_MODE": "writeonly"
+      },
+      "killBehavior": "polite",
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Run: debug server",
+      "runtimeArgs": [
+        "-r",
+        "ts-node/register"
+      ],
+      "args": [
+        "${workspaceFolder}/util/debug-server.ts"
+      ],
+      "outputCapture": "std",
+      "internalConsoleOptions": "openOnSessionStart",
+      "env": {
+        "NODE_ENV": "development",
+        "TS_NODE_SKIP_IGNORE": "true",
       },
       "killBehavior": "polite",
     },

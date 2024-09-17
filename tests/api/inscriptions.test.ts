@@ -3188,7 +3188,7 @@ describe('/inscriptions', () => {
           new TestChainhookPayloadBuilder()
             .rollback()
             .block({
-              height: 775618,
+              height: 778575,
               hash: '000000000000000000032ef6c45a69c0496456b3cae84ee9f2899f636d03c5ac',
               timestamp: 1675312161,
             })

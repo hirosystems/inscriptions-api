@@ -373,49 +373,51 @@ export class Brc20PgStore extends BasePgStoreModule {
                 WHERE ticker IN ${sql(filters.ticker)}
               `
             : sql`SELECT NULL AS count`
-        })
-        SELECT
-          e.operation,
-          e.avail_balance,
-          e.trans_balance,
-          e.address,
-          e.to_address,
-          d.ticker,
-          e.genesis_id AS inscription_id,
-          i.block_height,
-          l.block_hash,
-          l.tx_id,
-          l.timestamp,
-          l.output,
-          l.offset,
-          d.max AS deploy_max,
-          d.limit AS deploy_limit,
-          d.decimals AS deploy_decimals,
-          ${
-            needsGlobalEventCount || needsAddressEventCount || needsTickerCount
-              ? sql`(SELECT count FROM event_count)`
-              : sql`COUNT(*) OVER()`
-          } AS total
-        FROM brc20_operations AS e
-        INNER JOIN brc20_tokens AS d ON d.ticker = e.ticker
-        INNER JOIN inscriptions AS i ON i.genesis_id = e.genesis_id
-        INNER JOIN locations AS l ON i.ordinal_number = l.ordinal_number AND e.block_height = l.block_height AND e.tx_index = l.tx_index
-        WHERE TRUE
-          ${
-            operationsFilter
-              ? sql`AND e.operation IN ${sql(operationsFilter)}`
-              : sql`AND e.operation <> 'transfer_receive'`
-          }
-          ${filters.ticker ? sql`AND e.ticker IN ${sql(filters.ticker)}` : sql``}
-          ${filters.block_height ? sql`AND e.block_height = ${filters.block_height}` : sql``}
-          ${
-            filters.address
-              ? sql`AND (e.address = ${filters.address} OR e.to_address = ${filters.address})`
-              : sql``
-          }
-        ORDER BY e.block_height DESC, e.tx_index DESC
-        LIMIT ${page.limit}
-        OFFSET ${page.offset}
+        }),
+        operations AS (
+          SELECT
+            e.operation,
+            e.avail_balance,
+            e.trans_balance,
+            e.address,
+            e.to_address,
+            e.ticker,
+            e.genesis_id AS inscription_id,
+            d.max AS deploy_max,
+            d.limit AS deploy_limit,
+            d.decimals AS deploy_decimals,
+            i.ordinal_number,
+            e.block_height,
+            e.tx_index,
+            ${
+              needsGlobalEventCount || needsAddressEventCount || needsTickerCount
+                ? sql`(SELECT count FROM event_count)`
+                : sql`COUNT(*) OVER()`
+            } AS total
+          FROM brc20_operations AS e
+          INNER JOIN brc20_tokens AS d ON d.ticker = e.ticker
+          INNER JOIN inscriptions AS i ON i.genesis_id = e.genesis_id
+          WHERE TRUE
+            ${
+              operationsFilter
+                ? sql`AND e.operation IN ${sql(operationsFilter)}`
+                : sql`AND e.operation <> 'transfer_receive'`
+            }
+            ${filters.ticker ? sql`AND e.ticker IN ${sql(filters.ticker)}` : sql``}
+            ${filters.block_height ? sql`AND e.block_height = ${filters.block_height}` : sql``}
+            ${
+              filters.address
+                ? sql`AND (e.address = ${filters.address} OR e.to_address = ${filters.address})`
+                : sql``
+            }
+          ORDER BY e.block_height DESC, e.tx_index DESC
+          LIMIT ${page.limit}
+          OFFSET ${page.offset}
+        )
+        SELECT o.*, l.block_hash, l.tx_id, l.timestamp, l.output, l.offset
+        FROM operations AS o
+        INNER JOIN locations AS l USING (ordinal_number, block_height, tx_index)
+        ORDER BY o.block_height DESC, o.tx_index DESC
       `;
       return {
         total: results[0]?.total ?? 0,

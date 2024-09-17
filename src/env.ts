@@ -35,9 +35,9 @@ const schema = Type.Object({
   ORDHOOK_NODE_RPC_PORT: Type.Number({ default: 20456, minimum: 0, maximum: 65535 }),
   /**
    * Authorization token that the ordhook node must send with every event to make sure it's
-   * coming from the valid instance
+   * coming from the valid instance. Leave it undefined if you wish to avoid header validation.
    */
-  ORDHOOK_NODE_AUTH_TOKEN: Type.String(),
+  ORDHOOK_NODE_AUTH_TOKEN: Type.Optional(Type.String()),
   /**
    * Register ordhook predicates automatically when the API is first launched. Set this to `false`
    * if you're configuring your predicates manually for any reason.
@@ -55,6 +55,8 @@ const schema = Type.Object({
     { default: 'default', replay: 'replay' },
     { default: 'default' }
   ),
+  /** If the API should automatically shut down when Ordhook ingestion mode is `replay` */
+  ORDHOOK_REPLAY_INGESTION_MODE_AUTO_SHUTDOWN: Type.Boolean({ default: true }),
 
   PGHOST: Type.String(),
   PGPORT: Type.Number({ default: 5432, minimum: 0, maximum: 65535 }),

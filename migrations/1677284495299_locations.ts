@@ -28,6 +28,7 @@ export function up(pgm: MigrationBuilder): void {
     },
     address: {
       type: 'text',
+      notNull: true,
     },
     output: {
       type: 'text',
@@ -57,11 +58,6 @@ export function up(pgm: MigrationBuilder): void {
   pgm.createConstraint('locations', 'locations_pkey', {
     primaryKey: ['ordinal_number', 'block_height', 'tx_index'],
   });
-  pgm.createConstraint(
-    'locations',
-    'locations_ordinal_number_fk',
-    'FOREIGN KEY(ordinal_number) REFERENCES satoshis(ordinal_number) ON DELETE CASCADE'
-  );
   pgm.createIndex('locations', ['output', 'offset']);
   pgm.createIndex('locations', ['timestamp']);
   pgm.createIndex('locations', [
