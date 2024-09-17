@@ -57,6 +57,11 @@ const schema = Type.Object({
   ),
   /** If the API should automatically shut down when Ordhook ingestion mode is `replay` */
   ORDHOOK_REPLAY_INGESTION_MODE_AUTO_SHUTDOWN: Type.Boolean({ default: true }),
+  /**
+   * If the API should check that streamed blocks received from Ordhook are contiguous (without
+   * inscription number gaps).
+   */
+  ORDHOOK_STREAMED_BLOCK_CONTINUITY_CHECK: Type.Boolean({ default: true }),
 
   PGHOST: Type.String(),
   PGPORT: Type.Number({ default: 5432, minimum: 0, maximum: 65535 }),
