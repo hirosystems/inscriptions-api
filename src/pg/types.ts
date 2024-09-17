@@ -14,8 +14,9 @@ export type DbInscriptionInsert = {
   number: number;
   classic_number: number;
   block_height: number;
+  block_hash: string;
   tx_index: number;
-  address: string | null;
+  address: string;
   mime_type: string;
   content_type: string;
   content_length: number;
@@ -38,7 +39,7 @@ export type DbLocationInsert = {
   block_hash: string;
   tx_index: number;
   tx_id: string;
-  address: string | null;
+  address: string;
   output: string;
   offset: PgNumeric | null;
   prev_output: string | null;
@@ -52,22 +53,8 @@ export type DbCurrentLocationInsert = {
   ordinal_number: PgNumeric;
   block_height: number;
   tx_index: number;
-  address: string | null;
-};
-
-type AbstractLocationData = {
-  block_height: number;
-  block_hash: string;
-  tx_id: string;
-  tx_index: number;
-  address: string | null;
   output: string;
-  offset: PgNumeric | null;
-  prev_output: string | null;
-  prev_offset: PgNumeric | null;
-  value: PgNumeric | null;
-  transfer_type: DbLocationTransferType;
-  block_transfer_index: number | null;
+  address: string;
 };
 
 /**
@@ -124,7 +111,7 @@ export type DbLocation = {
   block_hash: string;
   tx_id: string;
   tx_index: number;
-  address: string | null;
+  address: string;
   output: string;
   offset: string | null;
   prev_output: string | null;
@@ -139,7 +126,7 @@ export type DbInscriptionLocationChange = {
   from_block_height: string;
   from_block_hash: string;
   from_tx_id: string;
-  from_address: string | null;
+  from_address: string;
   from_output: string;
   from_offset: string | null;
   from_value: string | null;
@@ -147,7 +134,7 @@ export type DbInscriptionLocationChange = {
   to_block_height: string;
   to_block_hash: string;
   to_tx_id: string;
-  to_address: string | null;
+  to_address: string;
   to_output: string;
   to_offset: string | null;
   to_value: string | null;

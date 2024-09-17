@@ -33,14 +33,15 @@ export class Brc20BlockCache {
   }
 
   deploy(operation: BitcoinBrc20DeployOperation, tx_id: string, tx_index: number) {
+    const zero = BigNumber('0');
     this.tokens.push({
       block_height: this.blockHeight,
       genesis_id: operation.deploy.inscription_id,
       tx_id,
       address: operation.deploy.address,
       ticker: operation.deploy.tick,
-      max: operation.deploy.max,
-      limit: operation.deploy.lim,
+      max: BigNumber(operation.deploy.max).toString(),
+      limit: BigNumber(operation.deploy.lim).toString(),
       decimals: operation.deploy.dec,
       self_mint: operation.deploy.self_mint,
     });
@@ -50,8 +51,8 @@ export class Brc20BlockCache {
       genesis_id: operation.deploy.inscription_id,
       ticker: operation.deploy.tick,
       address: operation.deploy.address,
-      avail_balance: '0',
-      trans_balance: '0',
+      avail_balance: zero.toString(),
+      trans_balance: zero.toString(),
       operation: DbBrc20Operation.deploy,
     });
     this.increaseOperationCount(DbBrc20Operation.deploy);
@@ -60,36 +61,38 @@ export class Brc20BlockCache {
   }
 
   mint(operation: BitcoinBrc20MintOperation, tx_index: number) {
+    const zero = BigNumber('0');
+    const amt = BigNumber(operation.mint.amt).abs();
     this.operations.push({
       block_height: this.blockHeight,
       tx_index,
       genesis_id: operation.mint.inscription_id,
       ticker: operation.mint.tick,
       address: operation.mint.address,
-      avail_balance: operation.mint.amt,
-      trans_balance: '0',
+      avail_balance: amt.toString(),
+      trans_balance: zero.toString(),
       operation: DbBrc20Operation.mint,
     });
-    const amt = BigNumber(operation.mint.amt);
     this.increaseTokenMintedSupply(operation.mint.tick, amt);
     this.increaseTokenTxCount(operation.mint.tick);
     this.increaseOperationCount(DbBrc20Operation.mint);
     this.increaseAddressOperationCount(operation.mint.address, DbBrc20Operation.mint);
-    this.updateAddressBalance(operation.mint.tick, operation.mint.address, amt, BigNumber(0), amt);
+    this.updateAddressBalance(operation.mint.tick, operation.mint.address, amt, zero, amt);
   }
 
   transfer(operation: BitcoinBrc20TransferOperation, tx_index: number) {
+    const zero = BigNumber('0');
+    const amt = BigNumber(operation.transfer.amt).abs();
     this.operations.push({
       block_height: this.blockHeight,
       tx_index,
       genesis_id: operation.transfer.inscription_id,
       ticker: operation.transfer.tick,
       address: operation.transfer.address,
-      avail_balance: BigNumber(operation.transfer.amt).negated().toString(),
-      trans_balance: operation.transfer.amt,
+      avail_balance: amt.negated().toString(),
+      trans_balance: amt.toString(),
       operation: DbBrc20Operation.transfer,
     });
-    const amt = BigNumber(operation.transfer.amt);
     this.increaseOperationCount(DbBrc20Operation.transfer);
     this.increaseTokenTxCount(operation.transfer.tick);
     this.increaseAddressOperationCount(operation.transfer.address, DbBrc20Operation.transfer);
@@ -98,19 +101,21 @@ export class Brc20BlockCache {
       operation.transfer.address,
       amt.negated(),
       amt,
-      BigNumber(0)
+      zero
     );
   }
 
   transferSend(operation: BitcoinBrc20TransferSendOperation, tx_index: number) {
+    const amt = BigNumber(operation.transfer_send.amt).abs();
+    const zero = BigNumber('0');
     this.operations.push({
       block_height: this.blockHeight,
       tx_index,
       genesis_id: operation.transfer_send.inscription_id,
       ticker: operation.transfer_send.tick,
       address: operation.transfer_send.sender_address,
-      avail_balance: '0',
-      trans_balance: BigNumber(operation.transfer_send.amt).negated().toString(),
+      avail_balance: zero.toString(),
+      trans_balance: amt.negated().toString(),
       operation: DbBrc20Operation.transferSend,
     });
     this.transferReceivers.set(
@@ -123,11 +128,10 @@ export class Brc20BlockCache {
       genesis_id: operation.transfer_send.inscription_id,
       ticker: operation.transfer_send.tick,
       address: operation.transfer_send.receiver_address,
-      avail_balance: operation.transfer_send.amt,
+      avail_balance: amt.toString(),
       trans_balance: '0',
       operation: DbBrc20Operation.transferReceive,
     });
-    const amt = BigNumber(operation.transfer_send.amt);
     this.increaseOperationCount(DbBrc20Operation.transferSend);
     this.increaseTokenTxCount(operation.transfer_send.tick);
     this.increaseAddressOperationCount(
@@ -143,7 +147,7 @@ export class Brc20BlockCache {
     this.updateAddressBalance(
       operation.transfer_send.tick,
       operation.transfer_send.sender_address,
-      BigNumber('0'),
+      zero,
       amt.negated(),
       amt.negated()
     );
@@ -151,7 +155,7 @@ export class Brc20BlockCache {
       operation.transfer_send.tick,
       operation.transfer_send.receiver_address,
       amt,
-      BigNumber(0),
+      zero,
       amt
     );
   }

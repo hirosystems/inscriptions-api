@@ -37,16 +37,6 @@ export function up(pgm: MigrationBuilder): void {
   pgm.createConstraint('inscription_transfers', 'inscription_transfers_pkey', {
     primaryKey: ['block_height', 'block_transfer_index'],
   });
-  pgm.createConstraint(
-    'inscription_transfers',
-    'inscription_transfers_locations_fk',
-    'FOREIGN KEY(ordinal_number, block_height, tx_index) REFERENCES locations(ordinal_number, block_height, tx_index) ON DELETE CASCADE'
-  );
-  pgm.createConstraint(
-    'inscription_transfers',
-    'inscription_transfers_satoshis_fk',
-    'FOREIGN KEY(ordinal_number) REFERENCES satoshis(ordinal_number) ON DELETE CASCADE'
-  );
   pgm.createIndex('inscription_transfers', ['genesis_id']);
   pgm.createIndex('inscription_transfers', ['number']);
 }

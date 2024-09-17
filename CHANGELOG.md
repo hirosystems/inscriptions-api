@@ -1,3 +1,77 @@
+## [4.0.4](https://github.com/hirosystems/ordinals-api/compare/v4.0.3...v4.0.4) (2024-06-17)
+
+
+### Bug Fixes
+
+* select correct block hash upon migration ([#366](https://github.com/hirosystems/ordinals-api/issues/366)) ([aea1a19](https://github.com/hirosystems/ordinals-api/commit/aea1a19463e82e7fa1f2574df0730a2626eeacc4))
+
+## [4.0.3](https://github.com/hirosystems/ordinals-api/compare/v4.0.2...v4.0.3) (2024-06-17)
+
+
+### Bug Fixes
+
+* add output to current locations and block_hash to inscriptions ([#365](https://github.com/hirosystems/ordinals-api/issues/365)) ([3d75deb](https://github.com/hirosystems/ordinals-api/commit/3d75deb664906eb1c4392ab18d5c77332047a875))
+
+## [4.0.2](https://github.com/hirosystems/ordinals-api/compare/v4.0.1...v4.0.2) (2024-06-16)
+
+
+### Bug Fixes
+
+* optimize brc-20 activity query ([#362](https://github.com/hirosystems/ordinals-api/issues/362)) ([e8a4fea](https://github.com/hirosystems/ordinals-api/commit/e8a4fea29a49cf55bd2291c2bf8349a756130028))
+
+## [4.0.1](https://github.com/hirosystems/ordinals-api/compare/v4.0.0...v4.0.1) (2024-06-16)
+
+
+### Bug Fixes
+
+* optimize base inscriptions query ([#364](https://github.com/hirosystems/ordinals-api/issues/364)) ([cbcc830](https://github.com/hirosystems/ordinals-api/commit/cbcc830a675e5c4dcd29650f1d5e8783ce096989))
+
+## [4.0.0](https://github.com/hirosystems/ordinals-api/compare/v3.1.0...v4.0.0) (2024-06-11)
+
+
+### ⚠ BREAKING CHANGES
+
+* support reinscription transfers (#348)
+* ingest BRC20 data from ordhook (#347)
+
+### Features
+
+* ingest BRC20 data from ordhook ([#347](https://github.com/hirosystems/ordinals-api/issues/347)) ([56a8851](https://github.com/hirosystems/ordinals-api/commit/56a88518b1ffe549524941e4d94d6347d11c98f3))
+* return `parent` and `metadata` in inscription responses ([#350](https://github.com/hirosystems/ordinals-api/issues/350)) ([939286e](https://github.com/hirosystems/ordinals-api/commit/939286e3a036063835206c533ce7f9a66cee0ba7))
+* support reinscription transfers ([#348](https://github.com/hirosystems/ordinals-api/issues/348)) ([5422156](https://github.com/hirosystems/ordinals-api/commit/5422156e9919f0c5870c9571ea9f591852c98b69))
+
+
+### Bug Fixes
+
+* detect block gaps when streaming from ordhook ([#349](https://github.com/hirosystems/ordinals-api/issues/349)) ([3c1480f](https://github.com/hirosystems/ordinals-api/commit/3c1480f5bfb8bec4993fffd50245c345d71cdf08))
+* ordhook ingestion ([#356](https://github.com/hirosystems/ordinals-api/issues/356)) ([dfc003e](https://github.com/hirosystems/ordinals-api/commit/dfc003ee65198a35bac1e0fc723068bde90c63c4))
+
+## [4.0.0-beta.2](https://github.com/hirosystems/ordinals-api/compare/v4.0.0-beta.1...v4.0.0-beta.2) (2024-06-11)
+
+
+### Bug Fixes
+
+* ordhook ingestion ([#356](https://github.com/hirosystems/ordinals-api/issues/356)) ([dfc003e](https://github.com/hirosystems/ordinals-api/commit/dfc003ee65198a35bac1e0fc723068bde90c63c4))
+
+## [4.0.0-beta.1](https://github.com/hirosystems/ordinals-api/compare/v3.1.0...v4.0.0-beta.1) (2024-04-26)
+
+
+### ⚠ BREAKING CHANGES
+
+* support reinscription transfers (#348)
+* ingest BRC20 data from ordhook (#347)
+
+### Features
+
+* ingest BRC20 data from ordhook ([#347](https://github.com/hirosystems/ordinals-api/issues/347)) ([56a8851](https://github.com/hirosystems/ordinals-api/commit/56a88518b1ffe549524941e4d94d6347d11c98f3))
+* return `parent` and `metadata` in inscription responses ([#350](https://github.com/hirosystems/ordinals-api/issues/350)) ([939286e](https://github.com/hirosystems/ordinals-api/commit/939286e3a036063835206c533ce7f9a66cee0ba7))
+* support reinscription transfers ([#348](https://github.com/hirosystems/ordinals-api/issues/348)) ([5422156](https://github.com/hirosystems/ordinals-api/commit/5422156e9919f0c5870c9571ea9f591852c98b69))
+
+
+### Bug Fixes
+
+* detect block gaps when streaming from ordhook ([#349](https://github.com/hirosystems/ordinals-api/issues/349)) ([3c1480f](https://github.com/hirosystems/ordinals-api/commit/3c1480f5bfb8bec4993fffd50245c345d71cdf08))
+
 ## [3.1.0](https://github.com/hirosystems/ordinals-api/compare/v3.0.1...v3.1.0) (2024-04-23)
 
 

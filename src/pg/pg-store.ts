@@ -35,7 +35,7 @@ import { BlockCache } from './block-cache';
 
 export const MIGRATIONS_DIR = path.join(__dirname, '../../migrations');
 const ORDINALS_GENESIS_BLOCK = 767430;
-export const INSERT_BATCH_SIZE = 4000;
+export const INSERT_BATCH_SIZE = 3500;
 
 type InscriptionIdentifier = { genesis_id: string } | { number: number };
 
@@ -82,7 +82,8 @@ export class PgStore extends BasePgStore {
    */
   async updateInscriptions(payload: BitcoinPayload): Promise<void> {
     await this.sqlWriteTransaction(async sql => {
-      const streamed = payload.chainhook.is_streaming_blocks;
+      const streamed =
+        ENV.ORDHOOK_INGESTION_MODE === 'default' && payload.chainhook.is_streaming_blocks;
       for (const event of payload.rollback) {
         logger.info(`PgStore rollback block ${event.block_identifier.index}`);
         const time = stopwatch();
@@ -184,36 +185,34 @@ export class PgStore extends BasePgStore {
         ...l,
         timestamp: sql`TO_TIMESTAMP(${l.timestamp})`,
       }));
+      // Insert locations, figure out moved inscriptions, insert inscription transfers.
       for await (const batch of batchIterate(entries, INSERT_BATCH_SIZE))
         await sql`
-          INSERT INTO locations ${sql(batch)}
-          ON CONFLICT (ordinal_number, block_height, tx_index) DO NOTHING
-        `;
-      // Insert block transfers.
-      let block_transfer_index = 0;
-      const transferEntries = [];
-      for (const transfer of cache.locations) {
-        const transferred = await sql<{ genesis_id: string; number: string }[]>`
-          SELECT genesis_id, number FROM inscriptions
-          WHERE ordinal_number = ${transfer.ordinal_number} AND (
-            block_height < ${transfer.block_height}
-            OR (block_height = ${transfer.block_height} AND tx_index < ${transfer.tx_index})
+          WITH location_inserts AS (
+            INSERT INTO locations ${sql(batch)}
+            ON CONFLICT (ordinal_number, block_height, tx_index) DO NOTHING
+            RETURNING ordinal_number, block_height, block_hash, tx_index
+          ),
+          prev_transfer_index AS (
+            SELECT MAX(block_transfer_index) AS max
+            FROM inscription_transfers
+            WHERE block_height = (SELECT block_height FROM location_inserts LIMIT 1)
+          ),
+          moved_inscriptions AS (
+            SELECT
+              i.genesis_id, i.number, i.ordinal_number, li.block_height, li.block_hash, li.tx_index,
+              (
+                ROW_NUMBER() OVER (ORDER BY li.block_height ASC, li.tx_index ASC) + (SELECT COALESCE(max, -1) FROM prev_transfer_index)
+              ) AS block_transfer_index
+            FROM inscriptions AS i
+            INNER JOIN location_inserts AS li ON li.ordinal_number = i.ordinal_number
+            WHERE
+              i.block_height < li.block_height
+              OR (i.block_height = li.block_height AND i.tx_index < li.tx_index)
           )
-        `;
-        for (const inscription of transferred)
-          transferEntries.push({
-            genesis_id: inscription.genesis_id,
-            number: inscription.number,
-            ordinal_number: transfer.ordinal_number,
-            block_height: transfer.block_height,
-            block_hash: transfer.block_hash,
-            tx_index: transfer.tx_index,
-            block_transfer_index: block_transfer_index++,
-          });
-      }
-      for await (const batch of batchIterate(transferEntries, INSERT_BATCH_SIZE))
-        await sql`
-          INSERT INTO inscription_transfers ${sql(batch)}
+          INSERT INTO inscription_transfers
+          (genesis_id, number, ordinal_number, block_height, block_hash, tx_index, block_transfer_index)
+          (SELECT * FROM moved_inscriptions)
           ON CONFLICT (block_height, block_transfer_index) DO NOTHING
         `;
     }
@@ -228,18 +227,20 @@ export class PgStore extends BasePgStore {
     if (cache.currentLocations.size) {
       // Deduct counts from previous owners
       const moved_sats = [...cache.currentLocations.keys()];
-      const prevOwners = await sql<{ address: string; count: number }[]>`
-        SELECT address, COUNT(*) AS count
-        FROM current_locations
-        WHERE ordinal_number IN ${sql(moved_sats)}
-        GROUP BY address
-      `;
-      for (const owner of prevOwners)
-        await sql`
-          UPDATE counts_by_address
-          SET count = count - ${owner.count}
-          WHERE address = ${owner.address}
+      for await (const batch of batchIterate(moved_sats, INSERT_BATCH_SIZE)) {
+        const prevOwners = await sql<{ address: string; count: number }[]>`
+          SELECT address, COUNT(*) AS count
+          FROM current_locations
+          WHERE ordinal_number IN ${sql(batch)}
+          GROUP BY address
         `;
+        for (const owner of prevOwners)
+          await sql`
+            UPDATE counts_by_address
+            SET count = count - ${owner.count}
+            WHERE address = ${owner.address}
+          `;
+      }
       // Insert locations
       const entries = [...cache.currentLocations.values()];
       for await (const batch of batchIterate(entries, INSERT_BATCH_SIZE))
@@ -255,24 +256,25 @@ export class PgStore extends BasePgStore {
               EXCLUDED.tx_index > current_locations.tx_index)
         `;
       // Update owner counts
-      await sql`
-        WITH new_owners AS (
-          SELECT address, COUNT(*) AS count
-          FROM current_locations
-          WHERE ordinal_number IN ${sql(moved_sats)}
-          GROUP BY address
-        )
-        INSERT INTO counts_by_address (address, count)
-        (SELECT address, count FROM new_owners)
-        ON CONFLICT (address) DO UPDATE SET count = counts_by_address.count + EXCLUDED.count
-      `;
-      if (streamed)
-        for await (const batch of batchIterate(moved_sats, INSERT_BATCH_SIZE))
+      for await (const batch of batchIterate(moved_sats, INSERT_BATCH_SIZE)) {
+        await sql`
+          WITH new_owners AS (
+            SELECT address, COUNT(*) AS count
+            FROM current_locations
+            WHERE ordinal_number IN ${sql(batch)}
+            GROUP BY address
+          )
+          INSERT INTO counts_by_address (address, count)
+          (SELECT address, count FROM new_owners)
+          ON CONFLICT (address) DO UPDATE SET count = counts_by_address.count + EXCLUDED.count
+        `;
+        if (streamed)
           await sql`
             UPDATE inscriptions
             SET updated_at = NOW()
             WHERE ordinal_number IN ${sql(batch)}
           `;
+      }
     }
     await this.counts.applyCounts(sql, cache);
   }
@@ -328,9 +330,9 @@ export class PgStore extends BasePgStore {
     if (cache.currentLocations.size) {
       for (const ordinal_number of moved_sats) {
         await sql`
-          INSERT INTO current_locations (ordinal_number, block_height, tx_index, address)
+          INSERT INTO current_locations (ordinal_number, block_height, tx_index, output, address)
           (
-            SELECT ordinal_number, block_height, tx_index, address
+            SELECT ordinal_number, block_height, tx_index, output, address
             FROM locations
             WHERE ordinal_number = ${ordinal_number}
             ORDER BY block_height DESC, tx_index DESC
@@ -503,136 +505,141 @@ export class PgStore extends BasePgStore {
           orderBy = sql`ARRAY_POSITION(ARRAY['common','uncommon','rare','epic','legendary','mythic'], s.rarity) ${order}, i.number DESC`;
           break;
       }
-      // This function will generate a query to be used for getting results or total counts.
-      const query = (
-        columns: postgres.PendingQuery<postgres.Row[]>,
-        sorting: postgres.PendingQuery<postgres.Row[]>
-      ) => sql`
-        SELECT ${columns}
-        FROM inscriptions AS i
-        INNER JOIN current_locations AS cur ON cur.ordinal_number = i.ordinal_number
-        INNER JOIN locations AS cur_l ON cur_l.ordinal_number = cur.ordinal_number AND cur_l.block_height = cur.block_height AND cur_l.tx_index = cur.tx_index
-        INNER JOIN locations AS gen_l ON gen_l.ordinal_number = i.ordinal_number AND gen_l.block_height = i.block_height AND gen_l.tx_index = i.tx_index
-        INNER JOIN satoshis AS s ON s.ordinal_number = i.ordinal_number
-        WHERE TRUE
-          ${
-            filters?.genesis_id?.length
-              ? sql`AND i.genesis_id IN ${sql(filters.genesis_id)}`
-              : sql``
-          }
-          ${
-            filters?.genesis_block_height
-              ? sql`AND i.block_height = ${filters.genesis_block_height}`
-              : sql``
-          }
-          ${
-            filters?.genesis_block_hash
-              ? sql`AND gen_l.block_hash = ${filters.genesis_block_hash}`
-              : sql``
-          }
-          ${
-            filters?.from_genesis_block_height
-              ? sql`AND i.block_height >= ${filters.from_genesis_block_height}`
-              : sql``
-          }
-          ${
-            filters?.to_genesis_block_height
-              ? sql`AND i.block_height <= ${filters.to_genesis_block_height}`
-              : sql``
-          }
-          ${
-            filters?.from_sat_coinbase_height
-              ? sql`AND s.coinbase_height >= ${filters.from_sat_coinbase_height}`
-              : sql``
-          }
-          ${
-            filters?.to_sat_coinbase_height
-              ? sql`AND s.coinbase_height <= ${filters.to_sat_coinbase_height}`
-              : sql``
-          }
-          ${
-            filters?.from_genesis_timestamp
-              ? sql`AND i.timestamp >= to_timestamp(${filters.from_genesis_timestamp})`
-              : sql``
-          }
-          ${
-            filters?.to_genesis_timestamp
-              ? sql`AND i.timestamp <= to_timestamp(${filters.to_genesis_timestamp})`
-              : sql``
-          }
-          ${
-            filters?.from_sat_ordinal
-              ? sql`AND i.ordinal_number >= ${filters.from_sat_ordinal}`
-              : sql``
-          }
-          ${
-            filters?.to_sat_ordinal ? sql`AND i.ordinal_number <= ${filters.to_sat_ordinal}` : sql``
-          }
-          ${filters?.number?.length ? sql`AND i.number IN ${sql(filters.number)}` : sql``}
-          ${
-            filters?.from_number !== undefined ? sql`AND i.number >= ${filters.from_number}` : sql``
-          }
-          ${filters?.to_number !== undefined ? sql`AND i.number <= ${filters.to_number}` : sql``}
-          ${filters?.address?.length ? sql`AND cur.address IN ${sql(filters.address)}` : sql``}
-          ${filters?.mime_type?.length ? sql`AND i.mime_type IN ${sql(filters.mime_type)}` : sql``}
-          ${filters?.output ? sql`AND cur_l.output = ${filters.output}` : sql``}
-          ${filters?.sat_rarity?.length ? sql`AND s.rarity IN ${sql(filters.sat_rarity)}` : sql``}
-          ${filters?.sat_ordinal ? sql`AND i.ordinal_number = ${filters.sat_ordinal}` : sql``}
-          ${filters?.recursive !== undefined ? sql`AND i.recursive = ${filters.recursive}` : sql``}
-          ${filters?.cursed === true ? sql`AND i.number < 0` : sql``}
-          ${filters?.cursed === false ? sql`AND i.number >= 0` : sql``}
-          ${
-            filters?.genesis_address?.length
-              ? sql`AND i.address IN ${sql(filters.genesis_address)}`
-              : sql``
-          }
-        ${sorting}
-      `;
-      const results = await sql<DbFullyLocatedInscriptionResult[]>`${query(
-        sql`
-          i.genesis_id,
-          i.number,
-          i.mime_type,
-          i.content_type,
-          i.content_length,
-          i.fee AS genesis_fee,
-          i.curse_type,
-          i.ordinal_number AS sat_ordinal,
-          i.parent,
-          i.metadata,
-          s.rarity AS sat_rarity,
-          s.coinbase_height AS sat_coinbase_height,
-          i.recursive,
-          (
-            SELECT STRING_AGG(ir.ref_genesis_id, ',')
-            FROM inscription_recursions AS ir
-            WHERE ir.genesis_id = i.genesis_id
-          ) AS recursion_refs,
-          i.block_height AS genesis_block_height,
+      // Do we need a filtered `COUNT(*)`? If so, try to use the pre-calculated counts we have in
+      // cached tables to speed up these queries.
+      const countType = getIndexResultCountType(filters);
+      const total = await this.counts.fromResults(countType, filters);
+      const results = await sql<(DbFullyLocatedInscriptionResult & { total: number })[]>`
+        WITH results AS (
+          SELECT
+            i.genesis_id,
+            i.number,
+            i.mime_type,
+            i.content_type,
+            i.content_length,
+            i.fee AS genesis_fee,
+            i.curse_type,
+            i.ordinal_number AS sat_ordinal,
+            i.parent,
+            i.metadata,
+            s.rarity AS sat_rarity,
+            s.coinbase_height AS sat_coinbase_height,
+            i.recursive,
+            (
+              SELECT STRING_AGG(ir.ref_genesis_id, ',')
+              FROM inscription_recursions AS ir
+              WHERE ir.genesis_id = i.genesis_id
+            ) AS recursion_refs,
+            i.block_height AS genesis_block_height,
+            i.tx_index AS genesis_tx_index,
+            i.timestamp AS genesis_timestamp,
+            i.address AS genesis_address,
+            cur.address,
+            cur.tx_index,
+            cur.block_height,
+            ${total === undefined ? sql`COUNT(*) OVER() AS total` : sql`0 AS total`},
+            ROW_NUMBER() OVER(ORDER BY ${orderBy}) AS row_num
+          FROM inscriptions AS i
+          INNER JOIN current_locations AS cur ON cur.ordinal_number = i.ordinal_number
+          INNER JOIN satoshis AS s ON s.ordinal_number = i.ordinal_number
+          WHERE TRUE
+            ${
+              filters?.genesis_id?.length
+                ? sql`AND i.genesis_id IN ${sql(filters.genesis_id)}`
+                : sql``
+            }
+            ${
+              filters?.genesis_block_height
+                ? sql`AND i.block_height = ${filters.genesis_block_height}`
+                : sql``
+            }
+            ${
+              filters?.genesis_block_hash
+                ? sql`AND i.block_hash = ${filters.genesis_block_hash}`
+                : sql``
+            }
+            ${
+              filters?.from_genesis_block_height
+                ? sql`AND i.block_height >= ${filters.from_genesis_block_height}`
+                : sql``
+            }
+            ${
+              filters?.to_genesis_block_height
+                ? sql`AND i.block_height <= ${filters.to_genesis_block_height}`
+                : sql``
+            }
+            ${
+              filters?.from_sat_coinbase_height
+                ? sql`AND s.coinbase_height >= ${filters.from_sat_coinbase_height}`
+                : sql``
+            }
+            ${
+              filters?.to_sat_coinbase_height
+                ? sql`AND s.coinbase_height <= ${filters.to_sat_coinbase_height}`
+                : sql``
+            }
+            ${
+              filters?.from_genesis_timestamp
+                ? sql`AND i.timestamp >= to_timestamp(${filters.from_genesis_timestamp})`
+                : sql``
+            }
+            ${
+              filters?.to_genesis_timestamp
+                ? sql`AND i.timestamp <= to_timestamp(${filters.to_genesis_timestamp})`
+                : sql``
+            }
+            ${
+              filters?.from_sat_ordinal
+                ? sql`AND i.ordinal_number >= ${filters.from_sat_ordinal}`
+                : sql``
+            }
+            ${
+              filters?.to_sat_ordinal
+                ? sql`AND i.ordinal_number <= ${filters.to_sat_ordinal}`
+                : sql``
+            }
+            ${filters?.number?.length ? sql`AND i.number IN ${sql(filters.number)}` : sql``}
+            ${
+              filters?.from_number !== undefined
+                ? sql`AND i.number >= ${filters.from_number}`
+                : sql``
+            }
+            ${filters?.to_number !== undefined ? sql`AND i.number <= ${filters.to_number}` : sql``}
+            ${filters?.address?.length ? sql`AND cur.address IN ${sql(filters.address)}` : sql``}
+            ${
+              filters?.mime_type?.length ? sql`AND i.mime_type IN ${sql(filters.mime_type)}` : sql``
+            }
+            ${filters?.output ? sql`AND cur.output = ${filters.output}` : sql``}
+            ${filters?.sat_rarity?.length ? sql`AND s.rarity IN ${sql(filters.sat_rarity)}` : sql``}
+            ${filters?.sat_ordinal ? sql`AND i.ordinal_number = ${filters.sat_ordinal}` : sql``}
+            ${
+              filters?.recursive !== undefined ? sql`AND i.recursive = ${filters.recursive}` : sql``
+            }
+            ${filters?.cursed === true ? sql`AND i.number < 0` : sql``}
+            ${filters?.cursed === false ? sql`AND i.number >= 0` : sql``}
+            ${
+              filters?.genesis_address?.length
+                ? sql`AND i.address IN ${sql(filters.genesis_address)}`
+                : sql``
+            }
+            ORDER BY ${orderBy} LIMIT ${page.limit} OFFSET ${page.offset}
+          )
+        SELECT
+          r.*,
           gen_l.block_hash AS genesis_block_hash,
           gen_l.tx_id AS genesis_tx_id,
-          i.timestamp AS genesis_timestamp,
-          i.address AS genesis_address,
           cur_l.tx_id,
-          cur.address,
           cur_l.output,
           cur_l.offset,
           cur_l.timestamp,
           cur_l.value
-        `,
-        sql`ORDER BY ${orderBy} LIMIT ${page.limit} OFFSET ${page.offset}`
-      )}`;
-      // Do we need a filtered `COUNT(*)`? If so, try to use the pre-calculated counts we have in
-      // cached tables to speed up these queries.
-      const countType = getIndexResultCountType(filters);
-      let total = await this.counts.fromResults(countType, filters);
-      if (total === undefined) {
-        // If the count is more complex, attempt it with a separate query.
-        const count = await sql<{ total: number }[]>`${query(sql`COUNT(*) AS total`, sql``)}`;
-        total = count[0].total;
-      }
+        FROM results AS r
+        INNER JOIN locations AS cur_l ON cur_l.ordinal_number = r.sat_ordinal AND cur_l.block_height = r.block_height AND cur_l.tx_index = r.tx_index
+        INNER JOIN locations AS gen_l ON gen_l.ordinal_number = r.sat_ordinal AND gen_l.block_height = r.genesis_block_height AND gen_l.tx_index = r.genesis_tx_index
+        ORDER BY r.row_num ASC
+      `;
       return {
-        total,
+        total: total ?? results[0]?.total ?? 0,
         results: results ?? [],
       };
     });
