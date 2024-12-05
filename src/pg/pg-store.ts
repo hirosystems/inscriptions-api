@@ -2,22 +2,10 @@ import {
   BasePgStore,
   PgConnectionVars,
   PgSqlClient,
-  batchIterate,
   connectPostgres,
-  logger,
-  runMigrations,
-  stopwatch,
 } from '@hirosystems/api-toolkit';
-import {
-  BadPayloadRequestError,
-  BitcoinEvent,
-  BitcoinPayload,
-} from '@hirosystems/chainhook-client';
-import * as path from 'path';
-import * as postgres from 'postgres';
 import { Order, OrderBy } from '../api/schemas';
 import { ENV } from '../env';
-import { Brc20PgStore } from './brc20/brc20-pg-store';
 import { CountsPgStore } from './counts/counts-pg-store';
 import { getIndexResultCountType } from './counts/helpers';
 import {
@@ -30,28 +18,19 @@ import {
   DbLocation,
   DbPaginatedResult,
 } from './types';
-import { normalizedHexString } from '../api/util/helpers';
-import { BlockCache } from './block-cache';
-
-export const MIGRATIONS_DIR = path.join(__dirname, '../../migrations');
-const ORDINALS_GENESIS_BLOCK = 767430;
-export const INSERT_BATCH_SIZE = 3500;
 
 type InscriptionIdentifier = { genesis_id: string } | { number: number };
 
-class BlockAlreadyIngestedError extends Error {}
-
 export class PgStore extends BasePgStore {
-  readonly brc20: Brc20PgStore;
   readonly counts: CountsPgStore;
 
-  static async connect(opts?: { skipMigrations: boolean }): Promise<PgStore> {
+  static async connect(): Promise<PgStore> {
     const pgConfig: PgConnectionVars = {
-      host: ENV.PGHOST,
-      port: ENV.PGPORT,
-      user: ENV.PGUSER,
-      password: ENV.PGPASSWORD,
-      database: ENV.PGDATABASE,
+      host: ENV.ORDINALS_PGHOST,
+      port: ENV.ORDINALS_PGPORT,
+      user: ENV.ORDINALS_PGUSER,
+      password: ENV.ORDINALS_PGPASSWORD,
+      database: ENV.ORDINALS_PGDATABASE,
     };
     const sql = await connectPostgres({
       usageName: 'ordinals-pg-store',
@@ -63,347 +42,12 @@ export class PgStore extends BasePgStore {
         statementTimeout: ENV.PG_STATEMENT_TIMEOUT,
       },
     });
-    if (opts?.skipMigrations !== true) {
-      await runMigrations(MIGRATIONS_DIR, 'up');
-    }
     return new PgStore(sql);
   }
 
   constructor(sql: PgSqlClient) {
     super(sql);
-    this.brc20 = new Brc20PgStore(this);
     this.counts = new CountsPgStore(this);
-  }
-
-  /**
-   * Inserts inscription genesis and transfers from Ordhook events. Also handles rollbacks from
-   * chain re-orgs.
-   * @param args - Apply/Rollback Ordhook events
-   */
-  async updateInscriptions(payload: BitcoinPayload): Promise<void> {
-    await this.sqlWriteTransaction(async sql => {
-      const streamed =
-        ENV.ORDHOOK_INGESTION_MODE === 'default' && payload.chainhook.is_streaming_blocks;
-      for (const event of payload.rollback) {
-        logger.info(`PgStore rollback block ${event.block_identifier.index}`);
-        const time = stopwatch();
-        await this.updateInscriptionsEvent(sql, event, 'rollback', streamed);
-        await this.brc20.updateBrc20Operations(sql, event, 'rollback');
-        await this.updateChainTipBlockHeight(sql, event.block_identifier.index - 1);
-        logger.info(
-          `PgStore rollback block ${
-            event.block_identifier.index
-          } finished in ${time.getElapsedSeconds()}s`
-        );
-      }
-      for (const event of payload.apply) {
-        logger.info(`PgStore apply block ${event.block_identifier.index}`);
-        const time = stopwatch();
-        try {
-          await this.updateInscriptionsEvent(sql, event, 'apply', streamed);
-          await this.brc20.updateBrc20Operations(sql, event, 'apply');
-        } catch (error) {
-          if (error instanceof BlockAlreadyIngestedError) {
-            logger.warn(error);
-            continue;
-          } else throw error;
-        }
-        await this.updateChainTipBlockHeight(sql, event.block_identifier.index);
-        logger.info(
-          `PgStore apply block ${
-            event.block_identifier.index
-          } finished in ${time.getElapsedSeconds()}s`
-        );
-      }
-    });
-  }
-
-  private async updateInscriptionsEvent(
-    sql: PgSqlClient,
-    event: BitcoinEvent,
-    direction: 'apply' | 'rollback',
-    streamed: boolean = false
-  ) {
-    const cache = new BlockCache(
-      event.block_identifier.index,
-      normalizedHexString(event.block_identifier.hash),
-      event.timestamp
-    );
-    if (direction === 'apply') await this.assertNextBlockIsNotIngested(sql, event);
-    for (const tx of event.transactions) {
-      const tx_id = normalizedHexString(tx.transaction_identifier.hash);
-      for (const operation of tx.metadata.ordinal_operations) {
-        if (operation.inscription_revealed) {
-          cache.reveal(operation.inscription_revealed, tx_id);
-          logger.info(
-            `PgStore ${direction} reveal inscription #${operation.inscription_revealed.inscription_number.jubilee} (${operation.inscription_revealed.inscription_id}) at block ${cache.blockHeight}`
-          );
-        }
-        if (operation.inscription_transferred) {
-          cache.transfer(operation.inscription_transferred, tx_id);
-          logger.info(
-            `PgStore ${direction} transfer satoshi ${operation.inscription_transferred.ordinal_number} to ${operation.inscription_transferred.destination.value} at block ${cache.blockHeight}`
-          );
-        }
-      }
-    }
-    switch (direction) {
-      case 'apply':
-        if (streamed && ENV.ORDHOOK_STREAMED_BLOCK_CONTINUITY_CHECK)
-          await this.assertNextBlockIsContiguous(sql, event, cache);
-        await this.applyInscriptions(sql, cache, streamed);
-        break;
-      case 'rollback':
-        await this.rollBackInscriptions(sql, cache, streamed);
-        break;
-    }
-  }
-
-  private async applyInscriptions(
-    sql: PgSqlClient,
-    cache: BlockCache,
-    streamed: boolean
-  ): Promise<void> {
-    if (cache.satoshis.length)
-      for await (const batch of batchIterate(cache.satoshis, INSERT_BATCH_SIZE))
-        await sql`
-          INSERT INTO satoshis ${sql(batch)}
-          ON CONFLICT (ordinal_number) DO NOTHING
-        `;
-    if (cache.inscriptions.length) {
-      const entries = cache.inscriptions.map(i => ({
-        ...i,
-        timestamp: sql`TO_TIMESTAMP(${i.timestamp})`,
-      }));
-      for await (const batch of batchIterate(entries, INSERT_BATCH_SIZE))
-        await sql`
-          INSERT INTO inscriptions ${sql(batch)}
-          ON CONFLICT (genesis_id) DO NOTHING
-        `;
-    }
-    if (cache.locations.length) {
-      const entries = cache.locations.map(l => ({
-        ...l,
-        timestamp: sql`TO_TIMESTAMP(${l.timestamp})`,
-      }));
-      // Insert locations, figure out moved inscriptions, insert inscription transfers.
-      for await (const batch of batchIterate(entries, INSERT_BATCH_SIZE))
-        await sql`
-          WITH location_inserts AS (
-            INSERT INTO locations ${sql(batch)}
-            ON CONFLICT (ordinal_number, block_height, tx_index) DO NOTHING
-            RETURNING ordinal_number, block_height, block_hash, tx_index
-          ),
-          prev_transfer_index AS (
-            SELECT MAX(block_transfer_index) AS max
-            FROM inscription_transfers
-            WHERE block_height = (SELECT block_height FROM location_inserts LIMIT 1)
-          ),
-          moved_inscriptions AS (
-            SELECT
-              i.genesis_id, i.number, i.ordinal_number, li.block_height, li.block_hash, li.tx_index,
-              (
-                ROW_NUMBER() OVER (ORDER BY li.block_height ASC, li.tx_index ASC) + (SELECT COALESCE(max, -1) FROM prev_transfer_index)
-              ) AS block_transfer_index
-            FROM inscriptions AS i
-            INNER JOIN location_inserts AS li ON li.ordinal_number = i.ordinal_number
-            WHERE
-              i.block_height < li.block_height
-              OR (i.block_height = li.block_height AND i.tx_index < li.tx_index)
-          )
-          INSERT INTO inscription_transfers
-          (genesis_id, number, ordinal_number, block_height, block_hash, tx_index, block_transfer_index)
-          (SELECT * FROM moved_inscriptions)
-          ON CONFLICT (block_height, block_transfer_index) DO NOTHING
-        `;
-    }
-    if (cache.recursiveRefs.size)
-      for (const [genesis_id, refs] of cache.recursiveRefs) {
-        const entries = refs.map(r => ({ genesis_id, ref_genesis_id: r }));
-        await sql`
-          INSERT INTO inscription_recursions ${sql(entries)}
-          ON CONFLICT (genesis_id, ref_genesis_id) DO NOTHING
-        `;
-      }
-    if (cache.currentLocations.size) {
-      // Deduct counts from previous owners
-      const moved_sats = [...cache.currentLocations.keys()];
-      for await (const batch of batchIterate(moved_sats, INSERT_BATCH_SIZE)) {
-        const prevOwners = await sql<{ address: string; count: number }[]>`
-          SELECT address, COUNT(*) AS count
-          FROM current_locations
-          WHERE ordinal_number IN ${sql(batch)}
-          GROUP BY address
-        `;
-        for (const owner of prevOwners)
-          await sql`
-            UPDATE counts_by_address
-            SET count = count - ${owner.count}
-            WHERE address = ${owner.address}
-          `;
-      }
-      // Insert locations
-      const entries = [...cache.currentLocations.values()];
-      for await (const batch of batchIterate(entries, INSERT_BATCH_SIZE))
-        await sql`
-          INSERT INTO current_locations ${sql(batch)}
-          ON CONFLICT (ordinal_number) DO UPDATE SET
-            block_height = EXCLUDED.block_height,
-            tx_index = EXCLUDED.tx_index,
-            address = EXCLUDED.address
-          WHERE
-            EXCLUDED.block_height > current_locations.block_height OR
-            (EXCLUDED.block_height = current_locations.block_height AND
-              EXCLUDED.tx_index > current_locations.tx_index)
-        `;
-      // Update owner counts
-      for await (const batch of batchIterate(moved_sats, INSERT_BATCH_SIZE)) {
-        await sql`
-          WITH new_owners AS (
-            SELECT address, COUNT(*) AS count
-            FROM current_locations
-            WHERE ordinal_number IN ${sql(batch)}
-            GROUP BY address
-          )
-          INSERT INTO counts_by_address (address, count)
-          (SELECT address, count FROM new_owners)
-          ON CONFLICT (address) DO UPDATE SET count = counts_by_address.count + EXCLUDED.count
-        `;
-        if (streamed)
-          await sql`
-            UPDATE inscriptions
-            SET updated_at = NOW()
-            WHERE ordinal_number IN ${sql(batch)}
-          `;
-      }
-    }
-    await this.counts.applyCounts(sql, cache);
-  }
-
-  private async rollBackInscriptions(
-    sql: PgSqlClient,
-    cache: BlockCache,
-    streamed: boolean
-  ): Promise<void> {
-    await this.counts.rollBackCounts(sql, cache);
-    const moved_sats = [...cache.currentLocations.keys()];
-    // Delete old current owners first.
-    if (cache.currentLocations.size) {
-      const prevOwners = await sql<{ address: string; count: number }[]>`
-        SELECT address, COUNT(*) AS count
-        FROM current_locations
-        WHERE ordinal_number IN ${sql(moved_sats)}
-        GROUP BY address
-      `;
-      for (const owner of prevOwners)
-        await sql`
-          UPDATE counts_by_address
-          SET count = count - ${owner.count}
-          WHERE address = ${owner.address}
-        `;
-      await sql`
-        DELETE FROM current_locations WHERE ordinal_number IN ${sql(moved_sats)}
-      `;
-    }
-    if (cache.locations.length)
-      for (const location of cache.locations)
-        await sql`
-          DELETE FROM locations
-          WHERE ordinal_number = ${location.ordinal_number}
-            AND block_height = ${location.block_height}
-            AND tx_index = ${location.tx_index}
-        `;
-    if (cache.inscriptions.length)
-      // This will also delete recursive refs.
-      for (const inscription of cache.inscriptions)
-        await sql`
-          DELETE FROM inscriptions WHERE genesis_id = ${inscription.genesis_id}
-        `;
-    if (cache.satoshis.length)
-      for (const satoshi of cache.satoshis)
-        await sql`
-          DELETE FROM satoshis
-          WHERE ordinal_number = ${satoshi.ordinal_number} AND NOT EXISTS (
-            SELECT genesis_id FROM inscriptions WHERE ordinal_number = ${satoshi.ordinal_number}
-          )
-        `;
-    // Recalculate current locations for affected inscriptions.
-    if (cache.currentLocations.size) {
-      for (const ordinal_number of moved_sats) {
-        await sql`
-          INSERT INTO current_locations (ordinal_number, block_height, tx_index, output, address)
-          (
-            SELECT ordinal_number, block_height, tx_index, output, address
-            FROM locations
-            WHERE ordinal_number = ${ordinal_number}
-            ORDER BY block_height DESC, tx_index DESC
-            LIMIT 1
-          )
-        `;
-      }
-      await sql`
-        WITH new_owners AS (
-          SELECT address, COUNT(*) AS count
-          FROM current_locations
-          WHERE ordinal_number IN ${sql(moved_sats)}
-          GROUP BY address
-        )
-        INSERT INTO counts_by_address (address, count)
-        (SELECT address, count FROM new_owners)
-        ON CONFLICT (address) DO UPDATE SET count = counts_by_address.count + EXCLUDED.count
-      `;
-      if (streamed)
-        for await (const batch of batchIterate(moved_sats, INSERT_BATCH_SIZE))
-          await sql`
-            UPDATE inscriptions
-            SET updated_at = NOW()
-            WHERE ordinal_number IN ${sql(batch)}
-          `;
-    }
-  }
-
-  private async assertNextBlockIsNotIngested(sql: PgSqlClient, event: BitcoinEvent) {
-    const result = await sql<{ block_height: number }[]>`
-      SELECT block_height::int FROM chain_tip
-    `;
-    if (!result.count) return false;
-    const currentHeight = result[0].block_height;
-    if (
-      event.block_identifier.index <= currentHeight &&
-      event.block_identifier.index !== ORDINALS_GENESIS_BLOCK
-    ) {
-      throw new BlockAlreadyIngestedError(
-        `Block ${event.block_identifier.index} is already ingested, chain tip is at ${currentHeight}`
-      );
-    }
-  }
-
-  private async assertNextBlockIsContiguous(
-    sql: PgSqlClient,
-    event: BitcoinEvent,
-    cache: BlockCache
-  ) {
-    if (!cache.revealedNumbers.length) {
-      // TODO: How do we check blocks with only transfers?
-      return;
-    }
-    const result = await sql<{ max: number | null; block_height: number }[]>`
-      WITH tip AS (SELECT block_height::int FROM chain_tip)
-      SELECT MAX(number)::int AS max, (SELECT block_height FROM tip)
-      FROM inscriptions WHERE number >= 0
-    `;
-    if (!result.count) return;
-    const data = result[0];
-    const firstReveal = cache.revealedNumbers.sort()[0];
-    if (data.max === null && firstReveal === 0) return;
-    if ((data.max ?? 0) + 1 != firstReveal)
-      throw new BadPayloadRequestError(
-        `Streamed block ${event.block_identifier.index} is non-contiguous, attempting to reveal #${firstReveal} when current max is #${data.max} at block height ${data.block_height}`
-      );
-  }
-
-  private async updateChainTipBlockHeight(sql: PgSqlClient, block_height: number): Promise<void> {
-    await sql`UPDATE chain_tip SET block_height = ${block_height}`;
   }
 
   async getChainTipBlockHeight(): Promise<number> {
@@ -454,18 +98,18 @@ export class PgStore extends BasePgStore {
         SELECT
           CASE
             WHEN delegate IS NOT NULL THEN delegate
-            ELSE genesis_id
+            ELSE inscription_id
           END AS genesis_id
         FROM inscriptions
         WHERE ${
           'genesis_id' in args
-            ? this.sql`genesis_id = ${args.genesis_id}`
+            ? this.sql`inscription_id = ${args.genesis_id}`
             : this.sql`number = ${args.number}`
         }
       )
       SELECT content, content_type, content_length
       FROM inscriptions
-      WHERE genesis_id = (SELECT genesis_id FROM content_id)
+      WHERE inscription_id = (SELECT genesis_id FROM content_id)
     `;
     if (result.count > 0) {
       return result[0];
@@ -513,7 +157,7 @@ export class PgStore extends BasePgStore {
       const results = await sql<(DbFullyLocatedInscriptionResult & { total: number })[]>`
         WITH results AS (
           SELECT
-            i.genesis_id,
+            i.inscription_id AS genesis_id,
             i.number,
             i.mime_type,
             i.content_type,
@@ -527,9 +171,9 @@ export class PgStore extends BasePgStore {
             s.coinbase_height AS sat_coinbase_height,
             i.recursive,
             (
-              SELECT STRING_AGG(ir.ref_genesis_id, ',')
+              SELECT STRING_AGG(ir.ref_inscription_id, ',')
               FROM inscription_recursions AS ir
-              WHERE ir.genesis_id = i.genesis_id
+              WHERE ir.inscription_id = i.inscription_id
             ) AS recursion_refs,
             i.block_height AS genesis_block_height,
             i.tx_index AS genesis_tx_index,
@@ -546,7 +190,7 @@ export class PgStore extends BasePgStore {
           WHERE TRUE
             ${
               filters?.genesis_id?.length
-                ? sql`AND i.genesis_id IN ${sql(filters.genesis_id)}`
+                ? sql`AND i.inscription_id IN ${sql(filters.genesis_id)}`
                 : sql``
             }
             ${
@@ -686,7 +330,7 @@ export class PgStore extends BasePgStore {
       transfer_data AS (
         SELECT
           t.number,
-          t.genesis_id,
+          t.inscription_id AS genesis_id,
           t.ordinal_number,
           t.block_height,
           t.tx_index,

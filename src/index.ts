@@ -5,26 +5,14 @@ import {
   registerShutdownConfig,
 } from '@hirosystems/api-toolkit';
 import { buildApiServer, buildPromServer } from './api/init';
-import { startOrdhookServer } from './ordhook/server';
 import { ENV } from './env';
 import { ApiMetrics } from './metrics/metrics';
 import { PgStore } from './pg/pg-store';
+import { Brc20PgStore } from './pg/brc20/brc20-pg-store';
 
-async function initBackgroundServices(db: PgStore) {
-  logger.info('Initializing background services...');
-  const server = await startOrdhookServer({ db });
-  registerShutdownConfig({
-    name: 'Ordhook Server',
-    forceKillable: false,
-    handler: async () => {
-      await server.close();
-    },
-  });
-}
-
-async function initApiService(db: PgStore) {
+async function initApiService(db: PgStore, brc20Db: Brc20PgStore) {
   logger.info('Initializing API service...');
-  const fastify = await buildApiServer({ db });
+  const fastify = await buildApiServer({ db, brc20Db });
   registerShutdownConfig({
     name: 'API Server',
     forceKillable: false,
@@ -47,35 +35,30 @@ async function initApiService(db: PgStore) {
 
     ApiMetrics.configure(db);
     await promServer.listen({ host: ENV.API_HOST, port: 9153 });
+
+    const profilerServer = await buildProfilerServer();
+    registerShutdownConfig({
+      name: 'Profiler Server',
+      forceKillable: false,
+      handler: async () => {
+        await profilerServer.close();
+      },
+    });
+    await profilerServer.listen({ host: ENV.API_HOST, port: ENV.PROFILER_PORT });
   }
 }
 
 async function initApp() {
-  logger.info(`Initializing in ${ENV.RUN_MODE} run mode...`);
-  const db = await PgStore.connect({ skipMigrations: ENV.RUN_MODE === 'readonly' });
-
-  if (['default', 'writeonly'].includes(ENV.RUN_MODE)) {
-    await initBackgroundServices(db);
-  }
-  if (['default', 'readonly'].includes(ENV.RUN_MODE)) {
-    await initApiService(db);
-  }
-
-  const profilerServer = await buildProfilerServer();
-  registerShutdownConfig({
-    name: 'Profiler Server',
-    forceKillable: false,
-    handler: async () => {
-      await profilerServer.close();
-    },
-  });
-  await profilerServer.listen({ host: ENV.API_HOST, port: ENV.PROFILER_PORT });
-
+  logger.info(`Initializing Ordinals API...`);
+  const db = await PgStore.connect();
+  const brc20Db = await Brc20PgStore.connect();
+  await initApiService(db, brc20Db);
   registerShutdownConfig({
     name: 'DB',
     forceKillable: false,
     handler: async () => {
       await db.close();
+      await brc20Db.close();
     },
   });
 }

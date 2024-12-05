@@ -1,4 +1,4 @@
-import { BasePgStoreModule, PgSqlClient, batchIterate, logger } from '@hirosystems/api-toolkit';
+import { BasePgStore, connectPostgres, PgConnectionVars } from '@hirosystems/api-toolkit';
 import { DbInscriptionIndexPaging, DbPaginatedResult } from '../types';
 import {
   DbBrc20Activity,
@@ -9,184 +9,29 @@ import {
 } from './types';
 import { Brc20TokenOrderBy } from '../../api/schemas';
 import { objRemoveUndefinedValues } from '../helpers';
-import { BitcoinEvent } from '@hirosystems/chainhook-client';
 import { sqlOr } from './helpers';
-import { INSERT_BATCH_SIZE } from '../pg-store';
-import { Brc20BlockCache } from './brc20-block-cache';
+import { ENV } from '../../env';
 
-export class Brc20PgStore extends BasePgStoreModule {
-  async updateBrc20Operations(
-    sql: PgSqlClient,
-    event: BitcoinEvent,
-    direction: 'apply' | 'rollback'
-  ): Promise<void> {
-    const block_height = event.block_identifier.index;
-    const cache = new Brc20BlockCache(block_height);
-    for (const tx of event.transactions) {
-      const tx_id = tx.transaction_identifier.hash;
-      const tx_index = tx.metadata.index;
-      if (tx.metadata.brc20_operation) {
-        const operation = tx.metadata.brc20_operation;
-        if ('deploy' in operation) {
-          cache.deploy(operation, tx_id, tx_index);
-          logger.info(
-            `Brc20PgStore ${direction} deploy ${operation.deploy.tick} by ${operation.deploy.address} at height ${block_height}`
-          );
-        } else if ('mint' in operation) {
-          cache.mint(operation, tx_index);
-          logger.info(
-            `Brc20PgStore ${direction} mint ${operation.mint.tick} ${operation.mint.amt} by ${operation.mint.address} at height ${block_height}`
-          );
-        } else if ('transfer' in operation) {
-          cache.transfer(operation, tx_index);
-          logger.info(
-            `Brc20PgStore ${direction} transfer ${operation.transfer.tick} ${operation.transfer.amt} by ${operation.transfer.address} at height ${block_height}`
-          );
-        } else if ('transfer_send' in operation) {
-          cache.transferSend(operation, tx_index);
-          logger.info(
-            `Brc20PgStore ${direction} transfer_send ${operation.transfer_send.tick} ${operation.transfer_send.amt} from ${operation.transfer_send.sender_address} to ${operation.transfer_send.receiver_address} at height ${block_height}`
-          );
-        }
-      }
-    }
-    switch (direction) {
-      case 'apply':
-        await this.applyOperations(sql, cache);
-        break;
-      case 'rollback':
-        await this.rollBackOperations(sql, cache);
-        break;
-    }
-  }
-
-  private async applyOperations(sql: PgSqlClient, cache: Brc20BlockCache) {
-    if (cache.tokens.length)
-      for await (const batch of batchIterate(cache.tokens, INSERT_BATCH_SIZE))
-        await sql`
-          INSERT INTO brc20_tokens ${sql(batch)}
-          ON CONFLICT (ticker) DO NOTHING
-        `;
-    if (cache.operations.length)
-      for await (const batch of batchIterate(cache.operations, INSERT_BATCH_SIZE))
-        await sql`
-          INSERT INTO brc20_operations ${sql(batch)}
-          ON CONFLICT (genesis_id, operation) DO NOTHING
-        `;
-    for (const [inscription_id, to_address] of cache.transferReceivers)
-      await sql`
-        UPDATE brc20_operations SET to_address = ${to_address}
-        WHERE genesis_id = ${inscription_id} AND operation = 'transfer_send'
-      `;
-    for (const [ticker, amount] of cache.tokenMintSupplies)
-      await sql`
-        UPDATE brc20_tokens SET minted_supply = minted_supply + ${amount.toString()}
-        WHERE ticker = ${ticker}
-      `;
-    for (const [ticker, num] of cache.tokenTxCounts)
-      await sql`
-        UPDATE brc20_tokens SET tx_count = tx_count + ${num} WHERE ticker = ${ticker}
-      `;
-    if (cache.operationCounts.size) {
-      const entries = [];
-      for (const [operation, count] of cache.operationCounts) entries.push({ operation, count });
-      for await (const batch of batchIterate(entries, INSERT_BATCH_SIZE))
-        await sql`
-          INSERT INTO brc20_counts_by_operation ${sql(batch)}
-          ON CONFLICT (operation) DO UPDATE SET
-            count = brc20_counts_by_operation.count + EXCLUDED.count
-        `;
-    }
-    if (cache.addressOperationCounts.size) {
-      const entries = [];
-      for (const [address, map] of cache.addressOperationCounts)
-        for (const [operation, count] of map) entries.push({ address, operation, count });
-      for await (const batch of batchIterate(entries, INSERT_BATCH_SIZE))
-        await sql`
-          INSERT INTO brc20_counts_by_address_operation ${sql(batch)}
-          ON CONFLICT (address, operation) DO UPDATE SET
-            count = brc20_counts_by_address_operation.count + EXCLUDED.count
-        `;
-    }
-    if (cache.totalBalanceChanges.size) {
-      const entries = [];
-      for (const [address, map] of cache.totalBalanceChanges)
-        for (const [ticker, values] of map)
-          entries.push({
-            ticker,
-            address,
-            avail_balance: values.avail.toString(),
-            trans_balance: values.trans.toString(),
-            total_balance: values.total.toString(),
-          });
-      for await (const batch of batchIterate(entries, INSERT_BATCH_SIZE))
-        await sql`
-          INSERT INTO brc20_total_balances ${sql(batch)}
-          ON CONFLICT (ticker, address) DO UPDATE SET
-            avail_balance = brc20_total_balances.avail_balance + EXCLUDED.avail_balance,
-            trans_balance = brc20_total_balances.trans_balance + EXCLUDED.trans_balance,
-            total_balance = brc20_total_balances.total_balance + EXCLUDED.total_balance
-        `;
-    }
-  }
-
-  private async rollBackOperations(sql: PgSqlClient, cache: Brc20BlockCache) {
-    if (cache.totalBalanceChanges.size) {
-      for (const [address, map] of cache.totalBalanceChanges)
-        for (const [ticker, values] of map)
-          await sql`
-            UPDATE brc20_total_balances SET
-              avail_balance = avail_balance - ${values.avail},
-              trans_balance = trans_balance - ${values.trans},
-              total_balance = total_balance - ${values.total}
-            WHERE address = ${address} AND ticker = ${ticker}
-          `;
-    }
-    if (cache.addressOperationCounts.size) {
-      for (const [address, map] of cache.addressOperationCounts)
-        for (const [operation, count] of map)
-          await sql`
-            UPDATE brc20_counts_by_address_operation
-            SET count = count - ${count}
-            WHERE address = ${address} AND operation = ${operation}
-          `;
-    }
-    if (cache.operationCounts.size) {
-      for (const [operation, count] of cache.operationCounts)
-        await sql`
-          UPDATE brc20_counts_by_operation
-          SET count = count - ${count}
-          WHERE operation = ${operation}
-        `;
-    }
-    for (const [ticker, amount] of cache.tokenMintSupplies)
-      await sql`
-        UPDATE brc20_tokens SET minted_supply = minted_supply - ${amount.toString()}
-        WHERE ticker = ${ticker}
-      `;
-    for (const [ticker, num] of cache.tokenTxCounts)
-      await sql`
-        UPDATE brc20_tokens SET tx_count = tx_count - ${num} WHERE ticker = ${ticker}
-      `;
-    for (const [inscription_id, _] of cache.transferReceivers)
-      await sql`
-        UPDATE brc20_operations SET to_address = NULL
-        WHERE genesis_id = ${inscription_id} AND operation = 'transfer_send'
-      `;
-    if (cache.operations.length) {
-      const blockHeights = cache.operations.map(o => o.block_height);
-      for await (const batch of batchIterate(blockHeights, INSERT_BATCH_SIZE))
-        await sql`
-          DELETE FROM brc20_operations WHERE block_height IN ${sql(batch)}
-        `;
-    }
-    if (cache.tokens.length) {
-      const tickers = cache.tokens.map(t => t.ticker);
-      for await (const batch of batchIterate(tickers, INSERT_BATCH_SIZE))
-        await sql`
-          DELETE FROM brc20_tokens WHERE ticker IN ${sql(batch)}
-        `;
-    }
+export class Brc20PgStore extends BasePgStore {
+  static async connect(): Promise<Brc20PgStore> {
+    const pgConfig: PgConnectionVars = {
+      host: ENV.BRC20_PGHOST,
+      port: ENV.BRC20_PGPORT,
+      user: ENV.BRC20_PGUSER,
+      password: ENV.BRC20_PGPASSWORD,
+      database: ENV.BRC20_PGDATABASE,
+    };
+    const sql = await connectPostgres({
+      usageName: 'brc20-pg-store',
+      connectionArgs: pgConfig,
+      connectionConfig: {
+        poolMax: ENV.PG_CONNECTION_POOL_MAX,
+        idleTimeout: ENV.PG_IDLE_TIMEOUT,
+        maxLifetime: ENV.PG_MAX_LIFETIME,
+        statementTimeout: ENV.PG_STATEMENT_TIMEOUT,
+      },
+    });
+    return new Brc20PgStore(sql);
   }
 
   async getTokens(

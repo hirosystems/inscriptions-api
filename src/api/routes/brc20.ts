@@ -61,7 +61,7 @@ export const Brc20Routes: FastifyPluginCallback<
     async (request, reply) => {
       const limit = request.query.limit ?? DEFAULT_API_LIMIT;
       const offset = request.query.offset ?? 0;
-      const response = await fastify.db.brc20.getTokens({
+      const response = await fastify.brc20Db.getTokens({
         limit,
         offset,
         ticker: request.query.ticker,
@@ -94,7 +94,7 @@ export const Brc20Routes: FastifyPluginCallback<
       },
     },
     async (request, reply) => {
-      const token = await fastify.db.brc20.getToken({ ticker: request.params.ticker });
+      const token = await fastify.brc20Db.getToken({ ticker: request.params.ticker });
       if (!token) {
         await reply.code(404).send(Value.Create(NotFoundResponse));
       } else {
@@ -131,7 +131,7 @@ export const Brc20Routes: FastifyPluginCallback<
     async (request, reply) => {
       const limit = request.query.limit ?? DEFAULT_API_LIMIT;
       const offset = request.query.offset ?? 0;
-      const holders = await fastify.db.brc20.getTokenHolders({
+      const holders = await fastify.brc20Db.getTokenHolders({
         limit,
         offset,
         ticker: request.params.ticker,
@@ -175,7 +175,7 @@ export const Brc20Routes: FastifyPluginCallback<
     async (request, reply) => {
       const limit = request.query.limit ?? DEFAULT_API_LIMIT;
       const offset = request.query.offset ?? 0;
-      const balances = await fastify.db.brc20.getBalances({
+      const balances = await fastify.brc20Db.getBalances({
         limit,
         offset,
         address: request.params.address,
@@ -217,7 +217,7 @@ export const Brc20Routes: FastifyPluginCallback<
     async (request, reply) => {
       const limit = request.query.limit ?? DEFAULT_API_LIMIT;
       const offset = request.query.offset ?? 0;
-      const balances = await fastify.db.brc20.getActivity(
+      const balances = await fastify.brc20Db.getActivity(
         { limit, offset },
         {
           ticker: request.query.ticker,

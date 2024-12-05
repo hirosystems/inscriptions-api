@@ -7,7 +7,6 @@ import {
   DbInscriptionType,
 } from '../types';
 import { DbInscriptionIndexResultCountType } from './types';
-import { BlockCache } from '../block-cache';
 
 /**
  * This class affects all the different tables that track inscription counts according to different
@@ -52,98 +51,6 @@ export class CountsPgStore extends BasePgStoreModule {
       case DbInscriptionIndexResultCountType.blockHash:
         return await this.getBlockHashCount(filters?.genesis_block_hash);
     }
-  }
-
-  async applyCounts(sql: PgSqlClient, cache: BlockCache) {
-    if (cache.mimeTypeCounts.size) {
-      const entries = [];
-      for (const [mime_type, count] of cache.mimeTypeCounts) entries.push({ mime_type, count });
-      await sql`
-        INSERT INTO counts_by_mime_type ${sql(entries)}
-        ON CONFLICT (mime_type) DO UPDATE SET count = counts_by_mime_type.count + EXCLUDED.count
-      `;
-    }
-    if (cache.satRarityCounts.size) {
-      const entries = [];
-      for (const [sat_rarity, count] of cache.satRarityCounts) entries.push({ sat_rarity, count });
-      await sql`
-        INSERT INTO counts_by_sat_rarity ${sql(entries)}
-        ON CONFLICT (sat_rarity) DO UPDATE SET count = counts_by_sat_rarity.count + EXCLUDED.count
-      `;
-    }
-    if (cache.inscriptionTypeCounts.size) {
-      const entries = [];
-      for (const [type, count] of cache.inscriptionTypeCounts) entries.push({ type, count });
-      await sql`
-        INSERT INTO counts_by_type ${sql(entries)}
-        ON CONFLICT (type) DO UPDATE SET count = counts_by_type.count + EXCLUDED.count
-      `;
-    }
-    if (cache.recursiveCounts.size) {
-      const entries = [];
-      for (const [recursive, count] of cache.recursiveCounts) entries.push({ recursive, count });
-      await sql`
-        INSERT INTO counts_by_recursive ${sql(entries)}
-        ON CONFLICT (recursive) DO UPDATE SET count = counts_by_recursive.count + EXCLUDED.count
-      `;
-    }
-    if (cache.genesisAddressCounts.size) {
-      const entries = [];
-      for (const [address, count] of cache.genesisAddressCounts) entries.push({ address, count });
-      await sql`
-        INSERT INTO counts_by_genesis_address ${sql(entries)}
-        ON CONFLICT (address) DO UPDATE SET count = counts_by_genesis_address.count + EXCLUDED.count
-      `;
-    }
-    if (cache.inscriptions.length)
-      await sql`
-        WITH prev_entry AS (
-          SELECT inscription_count_accum
-          FROM counts_by_block
-          WHERE block_height < ${cache.blockHeight}
-          ORDER BY block_height DESC
-          LIMIT 1
-        )
-        INSERT INTO counts_by_block
-          (block_height, block_hash, inscription_count, inscription_count_accum, timestamp)
-        VALUES (
-          ${cache.blockHeight}, ${cache.blockHash}, ${cache.inscriptions.length},
-          COALESCE((SELECT inscription_count_accum FROM prev_entry), 0) + ${cache.inscriptions.length},
-          TO_TIMESTAMP(${cache.timestamp})
-        )
-      `;
-    // Address ownership count is handled in `PgStore`.
-  }
-
-  async rollBackCounts(sql: PgSqlClient, cache: BlockCache) {
-    if (cache.inscriptions.length)
-      await sql`DELETE FROM counts_by_block WHERE block_height = ${cache.blockHeight}`;
-    if (cache.genesisAddressCounts.size)
-      for (const [address, count] of cache.genesisAddressCounts)
-        await sql`
-          UPDATE counts_by_genesis_address SET count = count - ${count} WHERE address = ${address}
-        `;
-    if (cache.recursiveCounts.size)
-      for (const [recursive, count] of cache.recursiveCounts)
-        await sql`
-          UPDATE counts_by_recursive SET count = count - ${count} WHERE recursive = ${recursive}
-        `;
-    if (cache.inscriptionTypeCounts.size)
-      for (const [type, count] of cache.inscriptionTypeCounts)
-        await sql`
-          UPDATE counts_by_type SET count = count - ${count} WHERE type = ${type}
-        `;
-    if (cache.satRarityCounts.size)
-      for (const [sat_rarity, count] of cache.satRarityCounts)
-        await sql`
-          UPDATE counts_by_sat_rarity SET count = count - ${count} WHERE sat_rarity = ${sat_rarity}
-        `;
-    if (cache.mimeTypeCounts.size)
-      for (const [mime_type, count] of cache.mimeTypeCounts)
-        await sql`
-          UPDATE counts_by_mime_type SET count = count - ${count} WHERE mime_type = ${mime_type}
-        `;
-    // Address ownership count is handled in `PgStore`.
   }
 
   async getInscriptionCountPerBlock(

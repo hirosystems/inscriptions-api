@@ -10,6 +10,7 @@ import { InscriptionsRoutes } from './routes/inscriptions';
 import { SatRoutes } from './routes/sats';
 import { StatsRoutes } from './routes/stats';
 import { StatusRoutes } from './routes/status';
+import { Brc20PgStore } from '../pg/brc20/brc20-pg-store';
 
 export const Api: FastifyPluginAsync<
   Record<never, never>,
@@ -23,13 +24,14 @@ export const Api: FastifyPluginAsync<
   await fastify.register(Brc20Routes);
 };
 
-export async function buildApiServer(args: { db: PgStore }) {
+export async function buildApiServer(args: { db: PgStore; brc20Db: Brc20PgStore }) {
   const fastify = Fastify({
     trustProxy: true,
     logger: PINO_LOGGER_CONFIG,
   }).withTypeProvider<TypeBoxTypeProvider>();
 
   fastify.decorate('db', args.db);
+  fastify.decorate('brc20Db', args.brc20Db);
   if (isProdEnv) {
     await fastify.register(FastifyMetrics, { endpoint: null });
   }
