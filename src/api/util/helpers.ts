@@ -112,8 +112,8 @@ export function parseBlockTransfers(
 
 export function parseBrc20Tokens(items: DbBrc20Token[]): Brc20TokenResponse[] {
   return items.map(i => ({
-    id: i.genesis_id,
-    number: parseInt(i.number),
+    id: i.inscription_id,
+    number: parseInt(i.inscription_number),
     block_height: parseInt(i.block_height),
     tx_id: i.tx_id,
     address: i.address,
@@ -173,7 +173,7 @@ export function parseBrc20Activities(items: DbBrc20Activity[]): Brc20ActivityRes
         return {
           ...activity,
           mint: {
-            amount: decimals(i.avail_balance, i.deploy_decimals),
+            amount: decimals(i.amount, i.deploy_decimals),
           },
         };
       }
@@ -181,7 +181,7 @@ export function parseBrc20Activities(items: DbBrc20Activity[]): Brc20ActivityRes
         return {
           ...activity,
           transfer: {
-            amount: decimals(i.trans_balance, i.deploy_decimals),
+            amount: decimals(i.amount, i.deploy_decimals),
             from_address: i.address,
           },
         };
@@ -190,7 +190,7 @@ export function parseBrc20Activities(items: DbBrc20Activity[]): Brc20ActivityRes
         return {
           ...activity,
           transfer_send: {
-            amount: decimals(BigNumber(i.trans_balance).abs().toString(), i.deploy_decimals),
+            amount: decimals(i.amount, i.deploy_decimals),
             from_address: i.address,
             to_address: i.to_address ?? i.address,
           },
@@ -217,7 +217,7 @@ export function parseSatPoint(satpoint: string): {
 }
 
 function decimals(num: string, decimals: number): string {
-  return new BigNumber(num).toFixed(decimals);
+  return new BigNumber(num).dividedBy(10 ** decimals).toFixed(decimals);
 }
 
 /**
