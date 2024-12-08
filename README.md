@@ -102,7 +102,7 @@ steps below:
     provide as much detail as possible, including steps to reproduce the bug or
     a clear description of the requested feature.
  1. **Evaluation SLA:** Our team reads and evaluates all the issues and pull
-    requests. We are avaliable Monday to Friday and we make a best effort to
+    requests. We are available Monday to Friday and we make a best effort to
     respond within 7 business days.
 
 Please **do not** use the issue tracker for personal support requests or to ask
@@ -132,7 +132,7 @@ Join our community and stay connected with the latest updates and discussions:
 - [Join our Discord community chat](https://discord.gg/ZQR6cyZC) to engage with
   other users, ask questions, and participate in discussions.
 
-- [Visit hiro.so](https://www.hiro.so/) for updates and subcribing to the
+- [Visit hiro.so](https://www.hiro.so/) for updates and subscribing to the
   mailing list.
 
 - Follow [Hiro on Twitter.](https://twitter.com/hirosystems)
