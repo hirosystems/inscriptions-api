@@ -295,7 +295,7 @@ export const InscriptionResponse = Type.Object(
       examples: ['1463d48e9248159084929294f64bda04487503d30ce7ab58365df1dc6fd58218'],
     }),
     genesis_fee: Type.String({ examples: ['3179'] }),
-    genesis_timestamp: Type.Integer({ exmaples: [1677733170000] }),
+    genesis_timestamp: Type.Integer({ examples: [1677733170000] }),
     tx_id: Type.String({
       examples: ['1463d48e9248159084929294f64bda04487503d30ce7ab58365df1dc6fd58218'],
     }),

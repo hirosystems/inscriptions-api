@@ -150,7 +150,7 @@ const IndexRoutes: FastifyPluginCallback<Record<never, never>, Server, TypeBoxTy
         operationId: 'getTransfersPerBlock',
         summary: 'Transfers per block',
         description:
-          'Retrieves a list of inscription transfers that ocurred at a specific Bitcoin block',
+          'Retrieves a list of inscription transfers that occurred at a specific Bitcoin block',
         tags: ['Inscriptions'],
         querystring: Type.Object({
           block: BlockParam,
