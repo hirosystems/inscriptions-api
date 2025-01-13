@@ -6,6 +6,7 @@ on:
       - master
       - develop
       - beta
+      - ordhook-pg
     tags-ignore:
       - '**'
     paths-ignore:

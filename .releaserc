@@ -11,6 +11,10 @@
     {
       "name": "alpha",
       "prerelease": true
+    },
+    {
+      "name": "ordhook-pg",
+      "prerelease": true
     }
   ],
   "plugins": [
