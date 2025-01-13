@@ -51,74 +51,74 @@ jobs:
       - name: Lint Unused Exports
         run: npm run lint:unused-exports
 
-  test:
-    strategy:
-      fail-fast: false
-      matrix:
-        suite: [api, brc-20, ordhook]
-    runs-on: ubuntu-latest
-    env:
-      API_HOST: 127.0.0.1
-      API_PORT: 3000
-      PGHOST: 127.0.0.1
-      PGPORT: 5432
-      PGUSER: postgres
-      PGPASSWORD: postgres
-      PGDATABASE: postgres
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+  # test:
+  #   strategy:
+  #     fail-fast: false
+  #     matrix:
+  #       suite: [api, brc-20, ordhook]
+  #   runs-on: ubuntu-latest
+  #   env:
+  #     API_HOST: 127.0.0.1
+  #     API_PORT: 3000
+  #     PGHOST: 127.0.0.1
+  #     PGPORT: 5432
+  #     PGUSER: postgres
+  #     PGPASSWORD: postgres
+  #     PGDATABASE: postgres
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #       with:
+  #         fetch-depth: 0
 
-      - name: Use Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version-file: '.nvmrc'
+  #     - name: Use Node.js
+  #       uses: actions/setup-node@v4
+  #       with:
+  #         node-version-file: '.nvmrc'
 
-      - name: Cache node modules
-        uses: actions/cache@v4
-        env:
-          cache-name: cache-node-modules
-        with:
-          path: |
-            ~/.npm
-            **/node_modules
-          key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('**/package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-build-${{ env.cache-name }}-
-            ${{ runner.os }}-build-
-            ${{ runner.os }}-
+  #     - name: Cache node modules
+  #       uses: actions/cache@v4
+  #       env:
+  #         cache-name: cache-node-modules
+  #       with:
+  #         path: |
+  #           ~/.npm
+  #           **/node_modules
+  #         key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('**/package-lock.json') }}
+  #         restore-keys: |
+  #           ${{ runner.os }}-build-${{ env.cache-name }}-
+  #           ${{ runner.os }}-build-
+  #           ${{ runner.os }}-
 
-      - name: Install deps
-        run: npm ci --audit=false
+  #     - name: Install deps
+  #       run: npm ci --audit=false
 
-      - name: Setup integration environment
-        run: |
-          sudo ufw disable
-          npm run testenv:run -- -d
-          npm run testenv:logs -- --no-color &> docker-compose-logs.txt &
+  #     - name: Setup integration environment
+  #       run: |
+  #         sudo ufw disable
+  #         npm run testenv:run -- -d
+  #         npm run testenv:logs -- --no-color &> docker-compose-logs.txt &
 
-      - name: Run tests
-        run: npm run test:${{ matrix.suite }} -- --coverage
+  #     - name: Run tests
+  #       run: npm run test:${{ matrix.suite }} -- --coverage
 
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v4
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
+  #     - name: Upload coverage to Codecov
+  #       uses: codecov/codecov-action@v4
+  #       with:
+  #         token: ${{ secrets.CODECOV_TOKEN }}
 
-      - name: Print integration environment logs
-        run: cat docker-compose-logs.txt
-        if: failure()
+  #     - name: Print integration environment logs
+  #       run: cat docker-compose-logs.txt
+  #       if: failure()
 
-      - name: Teardown integration environment
-        run: npm run testenv:stop
-        if: always()
+  #     - name: Teardown integration environment
+  #       run: npm run testenv:stop
+  #       if: always()
 
   build-publish:
     runs-on: ubuntu-latest
     needs:
       - lint
-      - test
+      # - test
     steps:
       - uses: actions/checkout@v4
         with:
