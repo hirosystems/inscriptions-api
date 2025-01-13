@@ -1,3 +1,21 @@
+## [5.0.0-ordhook-pg.1](https://github.com/hirosystems/ordinals-api/compare/v4.0.4...v5.0.0-ordhook-pg.1) (2025-01-13)
+
+
+### ⚠ BREAKING CHANGES
+
+* ingest missing ordhook fields, return delegate inscription content (#374)
+
+### Features
+
+* add profiler server ([#376](https://github.com/hirosystems/ordinals-api/issues/376)) ([ced2cd0](https://github.com/hirosystems/ordinals-api/commit/ced2cd073eb8acbeb325f5ddaee6880f05eaf22f))
+* ingest missing ordhook fields, return delegate inscription content ([#374](https://github.com/hirosystems/ordinals-api/issues/374)) ([04abd6e](https://github.com/hirosystems/ordinals-api/commit/04abd6ef9ccd84d2b7280204eeaa8a52d085de06))
+
+
+### Bug Fixes
+
+* add env var to toggle continuity check ([#381](https://github.com/hirosystems/ordinals-api/issues/381)) ([e3ceece](https://github.com/hirosystems/ordinals-api/commit/e3ceece7febf6699c467237dc385de33b17d041c))
+* brc20 endpoints ([d2372f2](https://github.com/hirosystems/ordinals-api/commit/d2372f2b7d086dde4a4d82ff8f7a19e0cf54bcc9))
+
 ## [4.0.4](https://github.com/hirosystems/ordinals-api/compare/v4.0.3...v4.0.4) (2024-06-17)
 
 
