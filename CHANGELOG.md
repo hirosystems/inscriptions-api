@@ -1,3 +1,10 @@
+## [5.0.0-ordhook-pg.4](https://github.com/hirosystems/ordinals-api/compare/v5.0.0-ordhook-pg.3...v5.0.0-ordhook-pg.4) (2025-01-29)
+
+
+### Bug Fixes
+
+* pg helpers ([a425832](https://github.com/hirosystems/ordinals-api/commit/a425832942b8d9c385c62e2ad9e7aa1971cb0bb5))
+
 ## [5.0.0-ordhook-pg.3](https://github.com/hirosystems/ordinals-api/compare/v5.0.0-ordhook-pg.2...v5.0.0-ordhook-pg.3) (2025-01-29)
 
 
