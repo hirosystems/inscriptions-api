@@ -1,3 +1,10 @@
+## [5.0.0-ordhook-pg.3](https://github.com/hirosystems/ordinals-api/compare/v5.0.0-ordhook-pg.2...v5.0.0-ordhook-pg.3) (2025-01-29)
+
+
+### Bug Fixes
+
+* display all timestamps in milliseconds ([e5e55f2](https://github.com/hirosystems/ordinals-api/commit/e5e55f204aff2bf37f55c1d4331bdd1ba068ad9b))
+
 ## [5.0.0-ordhook-pg.2](https://github.com/hirosystems/ordinals-api/compare/v5.0.0-ordhook-pg.1...v5.0.0-ordhook-pg.2) (2025-01-28)
 
 
